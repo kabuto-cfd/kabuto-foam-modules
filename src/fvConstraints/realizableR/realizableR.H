@@ -42,7 +42,10 @@ Description
 
         R = sum_i max(lambda_i, floor) e_i e_i^T
 
-    Other cells and the boundary values are not changed. The Reynolds-stress
+    The eigenvectors of a clipped cell come from Jacobi rotations, which keep
+    them orthonormal for repeated eigenvalues (Foam::eigenVectors returns the
+    same vector twice there). Other cells and the boundary values are not
+    changed. The Reynolds-stress
     models (LRR, SSG) call fvConstraints::constrain(R) right after solving
     for R, which is where this applies.
 

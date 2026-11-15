@@ -73,6 +73,88 @@ Foam::fv::realizableR::realizableR
 
 // * * * * * * * * * * * * * * Static Member Functions * * * * * * * * * * * //
 
+namespace
+{
+
+// Eigen-decomposition of a symmetric tensor by cyclic Jacobi rotations.
+// Returns the eigenvalues in lambda and the eigenvectors as the rows of V,
+// orthonormal also for repeated eigenvalues (Foam::eigenVectors returns the
+// same vector twice there).
+void jacobiEigen(const Foam::symmTensor& t, Foam::vector& lambda, Foam::tensor& V)
+{
+    using namespace Foam;
+
+    scalar a[3][3] =
+    {
+        {t.xx(), t.xy(), t.xz()},
+        {t.xy(), t.yy(), t.yz()},
+        {t.xz(), t.yz(), t.zz()}
+    };
+    scalar v[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+
+    const scalar scale = max(mag(t), vSmall);
+
+    for (label sweep = 0; sweep < 50; sweep++)
+    {
+        const scalar off =
+            sqr(a[0][1]) + sqr(a[0][2]) + sqr(a[1][2]);
+
+        if (off < sqr(1e-15*scale))
+        {
+            break;
+        }
+
+        for (label p = 0; p < 2; p++)
+        {
+            for (label q = p + 1; q < 3; q++)
+            {
+                if (mag(a[p][q]) < vSmall)
+                {
+                    continue;
+                }
+
+                const scalar theta = (a[q][q] - a[p][p])/(2*a[p][q]);
+                const scalar tn =
+                    sign(theta)/(mag(theta) + Foam::sqrt(sqr(theta) + 1));
+                const scalar c = 1/Foam::sqrt(sqr(tn) + 1);
+                const scalar s = tn*c;
+
+                for (label k = 0; k < 3; k++)
+                {
+                    const scalar akp = a[k][p], akq = a[k][q];
+                    a[k][p] = c*akp - s*akq;
+                    a[k][q] = s*akp + c*akq;
+                }
+                for (label k = 0; k < 3; k++)
+                {
+                    const scalar apk = a[p][k], aqk = a[q][k];
+                    a[p][k] = c*apk - s*aqk;
+                    a[q][k] = s*apk + c*aqk;
+                }
+                for (label k = 0; k < 3; k++)
+                {
+                    const scalar vkp = v[k][p], vkq = v[k][q];
+                    v[k][p] = c*vkp - s*vkq;
+                    v[k][q] = s*vkp + c*vkq;
+                }
+            }
+        }
+    }
+
+    lambda = vector(a[0][0], a[1][1], a[2][2]);
+
+    // Columns of v are the eigenvectors; return them as rows
+    V = tensor
+    (
+        v[0][0], v[1][0], v[2][0],
+        v[0][1], v[1][1], v[2][1],
+        v[0][2], v[1][2], v[2][2]
+    );
+}
+
+} // End anonymous namespace
+
+
 bool Foam::fv::realizableR::clip
 (
     symmTensor& r,
@@ -80,17 +162,18 @@ bool Foam::fv::realizableR::clip
     const scalar relativeMinEigenvalue
 )
 {
-    const vector lambda = eigenValues(r);
     const scalar floor =
         max(minEigenvalue, relativeMinEigenvalue*max(tr(r), 0)/3);
 
-    if (cmptMin(lambda) >= floor)
+    // Cheap test first: OpenFOAM's analytical eigenvalues
+    if (cmptMin(eigenValues(r)) >= floor)
     {
         return false;
     }
 
-    // Rows of ev are the eigenvectors, in the order of lambda
-    const tensor ev = eigenVectors(r, lambda);
+    vector lambda;
+    tensor ev;
+    jacobiEigen(r, lambda, ev);
 
     r =
         max(lambda.x(), floor)*sqr(ev.x())

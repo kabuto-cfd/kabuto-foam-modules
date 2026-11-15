@@ -26,11 +26,12 @@ GPL-3.0-or-later. Everything here links OpenFOAM and is GPL.
   24.04) and runs the tests and tutorials. Markdown-only and `docs/` changes start no run.
 
 ## Building in the Claude workspace
-The workspace cannot reach openfoam.org. An OpenFOAM-14 build lives in
-`~/OpenFOAM/OpenFOAM-14` when a session has built or installed it (see
-`docs/workspace-openfoam14.md`); then
+The workspace cannot reach openfoam.org. Install the repackaged openfoam.org package from this
+repository's release `openfoam14-runtime-<version>` into `/opt/openfoam14`, as
+`docs/workspace-openfoam14.md` shows (seconds, not a build); then
 ```bash
-set +e; source ~/OpenFOAM/OpenFOAM-14/etc/bashrc; set -e
+export USER=${USER:-root}
+set +e; source /opt/openfoam14/etc/bashrc; set -e
 ./Allwmake -j 2 && Test-realizableR && tutorials/realizableR/ductSecondaryFlow/Allrun 100
 ```
 

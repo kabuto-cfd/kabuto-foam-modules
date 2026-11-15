@@ -1,24 +1,43 @@
 # OpenFOAM-14 in the Claude workspace
 
 The Claude workspace (Ubuntu 24.04, amd64) reaches GitHub but not openfoam.org, so it cannot
-install the `openfoam14` package. The workflow `openfoam14-runtime.yml` repackages that package
-unchanged as a release asset of this repository, with the matching source pack:
+install the `openfoam14` package itself. The workflow `openfoam14-runtime.yml` repackages that
+package unchanged as a release asset of this repository (`openfoam14-runtime-<version>`), with
+the matching source pack, `DEPENDS.txt` and `BUILD-INFO.txt`.
+
+In the workspace `gh release download` fails (it uses GraphQL, which is blocked); the REST API
+works, and the 120 MB archive comes down in seconds:
 
 ```bash
-tag=$(gh release list --repo kabuto-cfd/kabuto-foam-modules --json tagName \
-      --jq '[.[] | select(.tagName | startswith("openfoam14-runtime-"))][0].tagName')
-mkdir -p /tmp/of14 && gh release download "$tag" --repo kabuto-cfd/kabuto-foam-modules \
-      --pattern 'openfoam14-*-ubuntu24.04-amd64.tar.xz' --dir /tmp/of14
-sudo tar -C /opt -xJf /tmp/of14/openfoam14-*.tar.xz
-sudo apt-get install -y -qq $(grep -oP 'Depends: \K[^<>]+' DEPENDS.txt)   # runtime libraries
+repo=kabuto-cfd/kabuto-foam-modules
+rel=$(gh api repos/$repo/releases --jq \
+  '[.[] | select(.tag_name | startswith("openfoam14-runtime-"))][0].tag_name')
+id=$(gh api repos/$repo/releases/tags/$rel --jq \
+  '.assets[] | select(.name | endswith("-ubuntu24.04-amd64.tar.xz")) | .id')
+gh api -H "Accept: application/octet-stream" repos/$repo/releases/assets/$id > /tmp/openfoam14.tar.xz
+sudo tar -C /opt -xJf /tmp/openfoam14.tar.xz
+sudo apt-get install -y -qq --no-install-recommends g++ make flex binutils-dev \
+    libreadline-dev libxt-dev zlib1g libopenmpi-dev openmpi-bin
+export USER=${USER:-root}       # else the user directories become ~/OpenFOAM/-14
 set +e; source /opt/openfoam14/etc/bashrc; set -e
 foamRun -help > /dev/null && echo "OpenFOAM-14 ready"
 ```
 
-To refresh it after an openfoam.org patch release, push a tag `openfoam14-runtime-<anything>`
-(or run the workflow by hand); the release is named after the package version.
+The package brings its own Scotch (`/opt/openfoam14/thirdparty`) and the full source, so
+`wmake` builds user libraries against it.
 
-If the release cannot be downloaded, build from source instead (2 to 4 hours on 2 cores):
+To refresh the release after an openfoam.org patch release, start the workflow by hand:
+
+```bash
+gh api -X POST repos/kabuto-cfd/kabuto-foam-modules/actions/workflows/openfoam14-runtime.yml/dispatches -f ref=main
+```
+
+(Pushing a tag from the workspace is refused by its git proxy; a tag pushed from elsewhere,
+`openfoam14-runtime-<anything>`, also starts it.) The release is named after the package
+version; the workflow fails if that release already exists.
+
+If no release can be downloaded, build from source instead (2 to 4 hours on 2 cores; a
+background command is stopped after 2 hours, rerun `./Allwmake -j 2 -q` to continue):
 
 ```bash
 sudo apt-get install -y build-essential flex bison zlib1g-dev libopenmpi-dev openmpi-bin \
@@ -31,6 +50,3 @@ sed -i 's/^export SCOTCH_TYPE=ThirdParty/export SCOTCH_TYPE=system/;
 set +e; source etc/bashrc; set -e
 ./Allwmake -j 2 -q > ../build14.log 2>&1
 ```
-
-A background command in the workspace is stopped after 2 hours: rerun `./Allwmake -j 2 -q`,
-it continues where it stopped.

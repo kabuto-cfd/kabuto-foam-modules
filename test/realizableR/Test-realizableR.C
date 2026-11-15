@@ -39,7 +39,7 @@ tensor rotation()
 {
     const vector a = vector(1, 2, 3)/mag(vector(1, 2, 3));
     const scalar t = 0.7;
-    const scalar c = cos(t), s = sin(t);
+    const scalar c = Foam::cos(t), s = Foam::sin(t);
     return
         c*tensor::I + (1 - c)*sqr(a)
       + s*tensor(0, -a.z(), a.y(), a.z(), 0, -a.x(), -a.y(), a.x(), 0);
@@ -115,6 +115,58 @@ int main()
         symmTensor r = Zero;
         check(fv::realizableR::clip(r, minEig, relEig), "clipped");
         check(mag(r - minEig*symmTensor::I) < 1e-15, "minEigenvalue*I");
+    }
+
+    Info<< "10000 random tensors" << nl;
+    {
+        // Small linear congruential generator: the same numbers everywhere
+        unsigned long long seed = 12345;
+        auto rnd = [&seed]()
+        {
+            seed = seed*6364136223846793005ULL + 1442695040888963407ULL;
+            return scalar(seed >> 11)/scalar(1ULL << 53)*2 - 1;
+        };
+
+        label nClipped = 0, nBad = 0;
+        for (label i = 0; i < 10000; i++)
+        {
+            const symmTensor r0(rnd(), rnd(), rnd(), rnd(), rnd(), rnd());
+            symmTensor r = r0;
+            const bool clipped = fv::realizableR::clip(r, minEig, relEig);
+            const scalar floor = max(minEig, relEig*max(tr(r0), 0)/3);
+            const vector l = eigenValues(r);
+            const vector l0 = eigenValues(r0);
+
+            // Eigenvalues above the floor are kept, the others become it,
+            // to the round-off of the analytical eigenvalues (~1e-9 |r|)
+            const scalar eps = 1e-8*max(mag(r0), 1);
+            bool ok = cmptMin(l) > floor - eps;
+            if (clipped)
+            {
+                nClipped++;
+                for (direction d = 0; d < 3; d++)
+                {
+                    const scalar expect = max(l0[d], floor);
+                    ok = ok && mag(l[d] - expect) < eps;
+                }
+                // The clipped tensor must commute with the original one
+                // (same eigenvectors)
+                ok = ok && mag((r & r0) - (r0 & r)) < eps;
+            }
+            else
+            {
+                ok = ok && r == r0;
+            }
+            if (!ok && nBad < 3)
+            {
+                Info<< "    r0 " << r0 << " l0 " << l0 << " floor " << floor
+                    << nl << "    r  " << r << " l " << l << " comm "
+                    << mag((r & r0) - (r0 & r)) << nl;
+            }
+            if (!ok) nBad++;
+        }
+        Info<< "    " << nClipped << " clipped" << nl;
+        check(nBad == 0, "eigenvalues max(lambda, floor), eigenvectors kept");
     }
 
     Info<< nl << (nFailed ? "FAILED" : "passed") << nl;
