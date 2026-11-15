@@ -1,0 +1,4 @@
+incompressible/kabutoIncompressibleMomentumTransportModels.C
+compressible/kabutoCompressibleMomentumTransportModels.C
+
+LIB = $(FOAM_USER_LIBBIN)/libkabutoMomentumTransportModels

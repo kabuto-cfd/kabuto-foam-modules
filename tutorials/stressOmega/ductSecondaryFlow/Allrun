@@ -1,0 +1,45 @@
+#!/bin/sh
+# stressOmega on OpenFOAM-14's ductSecondaryFlow tutorial (square duct, wall
+# functions): the upstream LRR case with the model switched to stressOmega and
+# an omega field added. Secondary flow in a straight duct is driven by the
+# differences of the normal stresses, which eddy-viscosity models miss.
+# Usage: ./Allrun [iterations, default 300]
+cd "${0%/*}" || exit 1
+. "$WM_PROJECT_DIR/bin/tools/RunFunctions"
+
+nIter=${1:-300}
+src="$FOAM_TUTORIALS/incompressibleFluid/ductSecondaryFlow"
+[ -d "$src" ] || { echo "Allrun: $src not found" 1>&2; exit 1; }
+
+rm -rf case && cp -r "$src" case && cd case || exit 1
+
+# omega = epsilon/(betaStar k) from the upstream initial fields
+sed -e 's/turbulentEpsilon/turbulentOmega/' \
+    -e 's/uniform 0.00613;/uniform 6.81;/' \
+    -e 's/epsilonWallFunction/omegaWallFunction/' \
+    -e 's/object\( *\)epsilon;/object\1omega;/' \
+    0/epsilon > 0/omega
+rm 0/epsilon
+
+sed -i 's/^\( *\)RASModel\( *\)LRR;/\1RASModel\2stressOmega;/' constant/momentumTransport
+foamDictionary -entry libs -set '("libkabutoMomentumTransportModels.so")' \
+    system/controlDict > /dev/null
+foamDictionary -entry endTime -set "$nIter" system/controlDict > /dev/null
+foamDictionary -entry writeInterval -set "$nIter" system/controlDict > /dev/null
+foamDictionary -entry 'divSchemes/div(phi,omega)' -set '$turbulence' \
+    system/fvSchemes > /dev/null
+sed -i 's/"(U|k|epsilon|R)"/"(U|k|omega|R)"/; s/^\( *\)epsilon \( *\)0.9;/\1omega \20.9;/; s/^\( *\)epsilon 1e-5;/\1omega 1e-5;/' \
+    system/fvSolution
+
+runApplication blockMesh
+runApplication foamRun
+
+grep -q "Selecting RAS turbulence model stressOmega" log.foamRun || {
+    echo "Allrun: stressOmega was not selected (see case/log.foamRun)" 1>&2
+    exit 1
+}
+grep -q "^End" log.foamRun || {
+    echo "Allrun: the run did not finish (see case/log.foamRun)" 1>&2
+    exit 1
+}
+echo "stressOmega ran $nIter iterations"

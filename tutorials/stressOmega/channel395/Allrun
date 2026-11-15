@@ -1,0 +1,30 @@
+#!/bin/sh
+# stressOmega integrated to the wall in a plane channel at Re_tau ~ 400
+# (half channel, h = 1, Ubar = 1 held by meanVelocityForce, Re_b = 2 h Ubar/nu
+# = 13750, first cell at y+ ~ 0.8, R = 0 at the wall). The wall shear stress
+# equals the pressure gradient times h, so Re_tau = sqrt(dp/dx h) h/nu. It is
+# checked against Dean's correlation Cf = 0.073 Re_b^-1/4 (Re_tau = 399):
+# stressOmega gives 400.5, kOmega2006 on the same mesh 388.6.
+# Usage: ./Allrun [iterations, default 3000; converged by about 2000]
+cd "${0%/*}" || exit 1
+. "$WM_PROJECT_DIR/bin/tools/RunFunctions"
+
+nIter=${1:-3000}
+foamDictionary -entry endTime -set "$nIter" system/controlDict > /dev/null
+foamDictionary -entry writeInterval -set "$nIter" system/controlDict > /dev/null
+
+runApplication blockMesh
+runApplication foamRun
+
+grep -q "Selecting RAS turbulence model stressOmega" log.foamRun || {
+    echo "Allrun: stressOmega was not selected (see log.foamRun)" 1>&2
+    exit 1
+}
+
+pg=$(grep "pressure gradient =" log.foamRun | tail -1 | sed 's/.*pressure gradient = //')
+awk -v pg="$pg" 'BEGIN {
+    nu = 1.4545e-4; ref = 399
+    ReTau = sqrt(pg)/nu
+    printf "Re_tau = %.1f (Dean: %d, %+.1f %%)\n", ReTau, ref, 100*(ReTau/ref - 1)
+    exit (ReTau > 0.97*ref && ReTau < 1.03*ref) ? 0 : 1
+}' || { echo "Allrun: Re_tau off by more than 3 %" 1>&2; exit 1; }

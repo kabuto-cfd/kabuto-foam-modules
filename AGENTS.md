@@ -16,12 +16,19 @@ GPL-3.0-or-later. Everything here links OpenFOAM and is GPL.
   `LIB = $(FOAM_USER_LIBBIN)/libkabuto<Area>` (e.g. `libkabutoFvConstraints`). A new area is one
   more `wmake $targetType src/<area>` line in `Allwmake` (and `wclean` in `Allwclean`).
   - `src/fvConstraints/realizableR` Reynolds-stress realizability limiter (eigenvalue clipping)
+  - `src/momentumTransportModels` RAS models, `libkabutoMomentumTransportModels`: the model
+    templates under `RAS/<model>/`, registered for incompressible and compressible flows by
+    `incompressible/` and `compressible/` (one `makeRASModel(<model>)` line each). Cases load it
+    with `libs ("libkabutoMomentumTransportModels.so");` in `system/controlDict`.
+    - `RAS/stressOmega` Wilcox's stress-omega Reynolds-stress model (2006)
 - `test/<module>/` small `Test-<module>` applications that check the numerics without a case;
   exit status 1 on failure. Built by `Allwmake`, run by CI.
 - `tutorials/<module>/<case>/Allrun` a short run that shows the module working. Prefer copying an
   upstream tutorial from `$FOAM_TUTORIALS` in `Allrun` and adding to it over committing a copy;
   `Allrun` must fail (non-zero exit) when the module did not act. Working copies (`case/`) are
-  ignored by git.
+  ignored by git. A case of our own (no upstream equivalent) is committed in full and its
+  `Allrun` checks a number against a reference (`stressOmega/channel395`: Re_tau against Dean's
+  correlation); its outputs are ignored by git.
 - `.github/workflows/build.yml` builds against the openfoam.org `openfoam14` package (Ubuntu
   24.04) and runs the tests and tutorials. Markdown-only and `docs/` changes start no run.
 
@@ -33,6 +40,7 @@ repository's release `openfoam14-runtime-<version>` into `/opt/openfoam14`, as
 export USER=${USER:-root}
 set +e; source /opt/openfoam14/etc/bashrc; set -e
 ./Allwmake -j 2 && Test-realizableR && tutorials/realizableR/ductSecondaryFlow/Allrun 100
+tutorials/stressOmega/ductSecondaryFlow/Allrun 300 && tutorials/stressOmega/channel395/Allrun
 ```
 
 ## Code conventions

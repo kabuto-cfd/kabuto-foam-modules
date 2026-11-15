@@ -1,0 +1,2 @@
+FoamFile { format ascii; class dictionary; object fvConstraints; }
+momentumSource { type meanVelocityForce; cellZone all; Ubar (1 0 0); }

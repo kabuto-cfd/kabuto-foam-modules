@@ -16,6 +16,7 @@ cd "${0%/*}" || exit 1
 . "$WM_PROJECT_DIR/wmake/scripts/AllwmakeParseArguments"
 
 wmake $targetType src/fvConstraints
+wmake $targetType src/momentumTransportModels
 
 # Tests (not installed anywhere but $FOAM_USER_APPBIN)
 wmake test/realizableR

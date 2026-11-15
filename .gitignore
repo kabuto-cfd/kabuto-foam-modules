@@ -15,3 +15,7 @@ tutorials/**/case/
 *~
 .*.swp
 .vscode/
+tutorials/**/constant/polyMesh/
+tutorials/**/[1-9]*/
+tutorials/**/log.*
+tutorials/**/postProcessing/

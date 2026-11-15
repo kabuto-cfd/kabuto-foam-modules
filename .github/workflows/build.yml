@@ -48,7 +48,9 @@ jobs:
         run: |
           set +e; source /opt/openfoam14/etc/bashrc; set -e
           tutorials/realizableR/ductSecondaryFlow/Allrun 100
+          tutorials/stressOmega/ductSecondaryFlow/Allrun 300
+          tutorials/stressOmega/channel395/Allrun
 
       - name: Logs on failure
         if: failure()
-        run: tail -n 60 tutorials/*/*/case/log.* || true
+        run: tail -n 60 tutorials/*/*/case/log.* tutorials/*/*/log.* || true
