@@ -3,4 +3,6 @@ cd "${0%/*}" || exit 1
 
 wclean src/fvConstraints
 wclean src/momentumTransportModels
+wclean src/wallFunctions
 wclean test/realizableR
+wclean test/wallLaw

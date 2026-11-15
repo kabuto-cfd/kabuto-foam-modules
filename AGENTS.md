@@ -21,6 +21,15 @@ GPL-3.0-or-later. Everything here links OpenFOAM and is GPL.
     `incompressible/` and `compressible/` (one `makeRASModel(<model>)` line each). Cases load it
     with `libs ("libkabutoMomentumTransportModels.so");` in `system/controlDict`.
     - `RAS/stressOmega` Wilcox's stress-omega Reynolds-stress model (2006)
+  - `src/wallFunctions` wall functions, `libkabutoWallFunctions`: the point-wise laws in
+    `wallLaw/wallLaw.H` (inline, unit-tested by `test/wallLaw`), two families of nut / epsilon /
+    omega boundary conditions and the `twoLayerEpsilon` fvConstraint:
+    - `*NonEquilibriumWallFunction` Kim & Choudhury (log layer, two-layer averages in the wall cell)
+    - `*NonEquilibriumSpaldingWallFunction` y+-insensitive (Spalding's law with the same
+      pressure-gradient correction); epsilon models add `twoLayerEpsilon` for cells inside y+ ~ 30
+    The epsilon / omega classes derive from copies of OpenFOAM's epsilon / omegaWallFunction with
+    `calculate` made virtual; the Spalding ones override only `calculate`. All walls of a case use
+    one family (OpenFOAM handles the wall cells of all wall-function patches from one master patch).
 - `test/<module>/` small `Test-<module>` applications that check the numerics without a case;
   exit status 1 on failure. Built by `Allwmake`, run by CI.
 - `tutorials/<module>/<case>/Allrun` a short run that shows the module working. Prefer copying an
@@ -41,6 +50,7 @@ export USER=${USER:-root}
 set +e; source /opt/openfoam14/etc/bashrc; set -e
 ./Allwmake -j 2 && Test-realizableR && tutorials/realizableR/ductSecondaryFlow/Allrun 100
 tutorials/stressOmega/ductSecondaryFlow/Allrun 300 && tutorials/stressOmega/channel395/Allrun
+Test-wallLaw && tutorials/wallFunctions/channelYPlus/Allrun && tutorials/wallFunctions/pitzDailySteady/Allrun nes2l
 ```
 
 ## Code conventions

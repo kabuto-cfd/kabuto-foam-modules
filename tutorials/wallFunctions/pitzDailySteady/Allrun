@@ -1,0 +1,47 @@
+#!/bin/sh
+# OpenFOAM-14's pitzDailySteady (k-epsilon, backward-facing step; first-cell
+# y+ 0.3 .. 27 on the lower wall) with a chosen wall treatment, and the
+# reattachment length behind the step. Fails if the flow does not reattach
+# between 5 and 9 step heights (OpenFOAM's standard wall functions: 6.76 h).
+#
+#   ./Allrun [std|ne|nes|nes2l]     (default nes2l; see channelYPlus/makeCase.py)
+cd "${0%/*}" || exit 1
+. "$WM_PROJECT_DIR/bin/tools/RunFunctions"
+
+wf=${1:-nes2l}
+src="$FOAM_TUTORIALS/incompressibleFluid/pitzDailySteady"
+[ -d "$src" ] || { echo "Allrun: $src not found" 1>&2; exit 1; }
+rm -rf case && cp -r "$src" case && cd case || exit 1
+
+case $wf in
+    std) sfx= ;;
+    ne) sfx=NonEquilibrium ;;
+    nes|nes2l) sfx=NonEquilibriumSpalding ;;
+    *) echo "Allrun: unknown treatment $wf" 1>&2; exit 1 ;;
+esac
+if [ -n "$sfx" ]
+then
+    sed -i "s/nutkWallFunction/nut${sfx}WallFunction/" 0/nut
+    sed -i "s/epsilonWallFunction/epsilon${sfx}WallFunction/" 0/epsilon
+    foamDictionary -entry libs -set '("libkabutoWallFunctions.so")' \
+        system/controlDict > /dev/null
+fi
+if [ "$wf" = nes2l ]
+then
+    cat > system/fvConstraints <<'EOD'
+FoamFile { format ascii; class dictionary; object fvConstraints; }
+twoLayerEpsilon { type twoLayerEpsilon; libs ("libkabutoWallFunctions.so"); }
+EOD
+    grep -q wallDist system/fvSchemes \
+     || printf '\nwallDist { method meshWave; }\n' >> system/fvSchemes
+fi
+
+runApplication blockMesh -dict "$FOAM_TUTORIALS/resources/blockMesh/pitzDaily"
+runApplication foamRun
+runApplication foamPostProcess -latestTime -func writeCellCentres
+runApplication foamFormatConvert -latestTime
+
+result=$(python3 ../reattachment.py .) || { echo "Allrun ($wf): $result" 1>&2; exit 1; }
+echo "$wf: $result"
+echo "$result" | awk '{ xh = $(NF-3); exit (xh > 5 && xh < 9) ? 0 : 1 }' \
+ || { echo "Allrun: reattachment outside 5 .. 9 h" 1>&2; exit 1; }

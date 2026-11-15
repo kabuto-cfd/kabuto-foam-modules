@@ -10,8 +10,11 @@ through `libs (...)`; nothing in OpenFOAM itself is changed.
 |---|---|---|
 | [`realizableR`](src/fvConstraints/realizableR/realizableR.H) | `libkabutoFvConstraints.so` | fvConstraint that keeps a Reynolds-stress field realizable: in cells where the smallest eigenvalue of **R** drops below a floor, the eigenvalues are clipped to that floor and **R** is rebuilt from its unchanged eigenvectors |
 | [`stressOmega`](src/momentumTransportModels/RAS/stressOmega/stressOmega.H) | `libkabutoMomentumTransportModels.so` | Wilcox's stress-ω Reynolds-stress model (2006): six stress equations with the LRR-QI pressure-strain model, closed with the ω equation of k-ω (2006); integrates to the wall or runs with wall functions; incompressible and compressible |
+| [`nut/epsilon/omegaNonEquilibriumWallFunction`](src/wallFunctions/nutNonEquilibriumWallFunction/nutNonEquilibriumWallFunctionFvPatchScalarField.H) | `libkabutoWallFunctions.so` | Kim & Choudhury's non-equilibrium wall functions: log law sensitised to the pressure gradient along the wall, production and dissipation in the wall cell averaged over a two-layer profile; first cell in the log layer |
+| [`nut/epsilon/omegaNonEquilibriumSpaldingWallFunction`](src/wallFunctions/nutNonEquilibriumSpaldingWallFunction/nutNonEquilibriumSpaldingWallFunctionFvPatchScalarField.H) | `libkabutoWallFunctions.so` | y⁺-insensitive version: Spalding's law with the same pressure-gradient correction, production from the Spalding profile under the local total stress; first cell anywhere from y⁺ ≈ 1 to the log layer |
+| [`twoLayerEpsilon`](src/wallFunctions/twoLayerEpsilon/twoLayerEpsilon.H) | `libkabutoWallFunctions.so` | fvConstraint: Wolfstein's two-layer ε and ν_t in the viscosity-affected cells (Re_y < 200), which ε models need to be y⁺-insensitive |
 
-Planned: non-equilibrium wall functions, and solver modules for `foamRun`.
+Planned: solver modules for `foamRun`.
 
 ### realizableR
 
@@ -89,6 +92,69 @@ Checks (`tutorials/stressOmega/`):
 
 The compressible variant is built and registered but not yet run on a test case.
 
+### Non-equilibrium wall functions
+
+Two families, each a nut boundary condition and the matching epsilon or omega one (Cmu, κ, E
+and `yvStar` are set on the nut condition; `p` / `rho` name the pressure and density fields,
+p in Pa is divided by ρ):
+
+| | `…NonEquilibriumWallFunction` | `…NonEquilibriumSpaldingWallFunction` |
+|---|---|---|
+| velocity law | log law (y* > 11.5), laminar below | Spalding's law, any y⁺ |
+| pressure gradient | Ũ = U − ½ (dp/ds) […] (Kim & Choudhury) | the same Ũ |
+| G and ε / ω in the wall cell | averages over the cell of the two-layer profile | G = u_τ⁴/ν (τ⁺ − γ) γ with γ = dU⁺/dy⁺ of Spalding's profile and τ⁺ = 1 + p⁺y⁺; ε blended viscous/log (Kader), ω = (ω_vis² + ω_log²)^½ |
+| first cell | y⁺ ≳ 30 | y⁺ ≈ 1 … 100+ (ε models with `twoLayerEpsilon`) |
+
+The pressure-gradient correction is limited to 0 ≤ Ũ ≤ 2U, so it fades where the near-wall
+velocity vanishes (separation and reattachment lines); unlimited, it fed back on itself there.
+
+```
+wall { type nutNonEquilibriumSpaldingWallFunction;  value uniform 0; }        // 0/nut
+wall { type omegaNonEquilibriumSpaldingWallFunction; value $internalField; }  // 0/omega
+wall { type kqRWallFunction;                          value $internalField; }  // 0/k
+
+libs ("libkabutoWallFunctions.so");                                            // controlDict
+```
+
+For an ε model, the y⁺-insensitive family also needs `twoLayerEpsilon` in `system/fvConstraints`
+(and `wallDist { method meshWave; }` in `fvSchemes`): a high-Re ε model in the cells between the
+wall cell and y⁺ ≈ 30 overpredicts the mixing by itself, which no wall function can correct.
+With it the ε equation's initial residual stays near 1e-2 (the near-wall ε is imposed after each
+solve); judge convergence from the other fields.
+
+Checks:
+
+- `tutorials/wallFunctions/channelYPlus`: plane channel at Re_τ = 1864 (Dean's correlation),
+  first cell centre at y⁺ = 1 … 100. Deviation of Re_τ from 1864 (`./Allrun -all`):
+
+  | model | treatment | y⁺ = 1 | 2 | 5 | 11 | 20 | 40 | 100 |
+  |---|---|---|---|---|---|---|---|---|
+  | k-ε | OpenFOAM standard | +37.4 % | +36.3 % | +28.7 % | +10.2 % | −3.0 % | −2.9 % | −2.9 % |
+  | k-ε | NonEquilibrium | +37.4 % | +36.3 % | +28.7 % | +10.2 % | −1.2 % | −4.5 % | −6.8 % |
+  | k-ε | NonEquilibriumSpalding | +37.3 % | +35.9 % | +30.0 % | +7.9 % | +1.5 % | −1.0 % | −1.7 % |
+  | k-ε | NonEquilibriumSpalding + twoLayerEpsilon | −2.0 % | −0.9 % | +4.6 % | +4.1 % | +1.9 % | −1.4 % | −1.8 % |
+  | k-ω SST | OpenFOAM standard | −3.4 % | −4.6 % | +0.8 % | +11.6 % | −3.1 % | −3.0 % | −2.9 % |
+  | k-ω SST | NonEquilibrium | −3.4 % | −4.6 % | +0.8 % | +0.9 % | −2.3 % | −5.0 % | −6.8 % |
+  | k-ω SST | NonEquilibriumSpalding | −3.5 % | −4.7 % | +0.1 % | +3.2 % | +2.0 % | −0.1 % | −1.8 % |
+
+  The channel is driven by a body force (meanVelocityForce), so the pressure gradient is zero
+  and the table shows the near-wall treatment alone. The two-layer averaging of the
+  NonEquilibrium family lowers the friction by up to 7 % on coarse wall cells (y⁺ = 100).
+- `tutorials/wallFunctions/pitzDailySteady`: OpenFOAM's backward-facing step (k-ε; first-cell
+  y⁺ 0.3 … 27 on the lower wall). Reattachment length: standard 6.76 h, NonEquilibrium 6.72 h,
+  NonEquilibriumSpalding 6.95 h, with twoLayerEpsilon 6.91 h. On this mesh the near-wall cells
+  sit mostly in the buffer layer, where the NonEquilibrium family falls back to its laminar
+  branch, so this shows that the treatments are stable in separated flow rather than which is
+  more accurate.
+- `Test-wallLaw`: Spalding's law and its inverses, the friction velocity from a sample at
+  y⁺ = 0.5 … 3000, and the pressure-gradient correction (no gradient, exact laminar profile,
+  continuity at y_v, the limit).
+
+References: Kim & Choudhury (1995), ASME FED 217; the form of the Fluent theory guide.
+Spalding (1961), J. Appl. Mech. 28, 455. Kader (1981), Int. J. Heat Mass Transfer 24, 1541.
+Popovac & Hanjalić (2007), Flow Turbul. Combust. 78, 177. Wolfshtein (1969), Int. J. Heat
+Mass Transfer 12, 301.
+
 ## Build
 
 ```bash
@@ -110,6 +176,11 @@ The libraries go to `$FOAM_USER_LIBBIN`, which OpenFOAM searches when a case nam
   stressOmega.
 - `tutorials/stressOmega/channel395/Allrun` runs the wall-resolved channel and fails when Re_τ
   is more than 3 % off Dean's correlation.
+- `Test-wallLaw` checks the laws of the wall used by the wall functions.
+- `tutorials/wallFunctions/channelYPlus/Allrun [-all]` runs the channel y⁺ sweep and fails when
+  a y⁺-insensitive treatment is more than 6 % off; `tutorials/wallFunctions/pitzDailySteady/Allrun
+  [std|ne|nes|nes2l]` runs the backward-facing step and fails when it does not reattach between
+  5 and 9 step heights.
 
 GitHub Actions builds every module against the openfoam.org OpenFOAM-14 package on
 Ubuntu 24.04 and runs all of these for every change.

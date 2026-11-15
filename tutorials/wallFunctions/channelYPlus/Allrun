@@ -1,0 +1,40 @@
+#!/bin/sh
+# y+-insensitivity of the wall treatments in a plane channel (Re_tau 1864):
+# the first cell centre is put at y+ = 1 ... 100 and Re_tau from the converged
+# pressure gradient (= wall shear stress, h = 1) is compared with Dean's
+# correlation. Fails if a y+-insensitive treatment is more than 6 % off.
+#
+#   ./Allrun            kOmegaSST + nes, kEpsilon + nes2l at y+ = 1, 5, 11, 30, 100
+#   ./Allrun -all       also std and ne, and y+ = 2, 20, 40 (the README table)
+cd "${0%/*}" || exit 1
+
+yPluses="1 5 11 30 100"
+runs="kOmegaSST:nes kEpsilon:nes2l"
+if [ "$1" = -all ]
+then
+    yPluses="1 2 5 11 20 40 100"
+    runs="kEpsilon:std kEpsilon:ne kEpsilon:nes kEpsilon:nes2l kOmegaSST:std kOmegaSST:ne kOmegaSST:nes"
+fi
+
+rm -rf cases results.txt
+mkdir cases
+status=0
+for run in $runs
+do
+    model=${run%%:*}; wf=${run##*:}
+    for yp in $yPluses
+    do
+        d=cases/${model}_${wf}_$yp
+        python3 makeCase.py "$d" "$model" "$wf" "$yp" > /dev/null
+        (cd "$d" && blockMesh > log.blockMesh 2>&1 && foamRun > log.foamRun 2>&1)
+        pg=$(grep "pressure gradient =" "$d/log.foamRun" | tail -1 \
+            | sed 's/.*pressure gradient = //')
+        line=$(awk -v pg="${pg:-0}" -v m="$model" -v w="$wf" -v yp="$yp" 'BEGIN {
+            ReTau = sqrt(pg > 0 ? pg : 0)/2.5e-5; dev = 100*(ReTau/1864 - 1)
+            printf "%-10s %-6s y+ %4d  Re_tau %5.0f  %+6.1f %%", m, w, yp, ReTau, dev
+            bad = (w == "nes" || w == "nes2l") && (dev > 6 || dev < -6)
+            exit bad }') || { line="$line  <- off by more than 6 %"; status=1; }
+        echo "$line" | tee -a results.txt
+    done
+done
+exit $status
