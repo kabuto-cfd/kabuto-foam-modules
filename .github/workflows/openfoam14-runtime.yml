@@ -1,0 +1,59 @@
+name: OpenFOAM-14 runtime package
+
+# Repackages the openfoam.org OpenFOAM-14 package for Ubuntu 24.04 (amd64) as a
+# release asset, with the matching source pack, for environments that can reach
+# GitHub but not openfoam.org (the Claude workspace). Unpack it to /opt:
+#   tar -C /opt -xJf openfoam14-<version>-ubuntu24.04-amd64.tar.xz
+#   source /opt/openfoam14/etc/bashrc
+# Runtime libraries come from Ubuntu: see DEPENDS.txt in the release.
+# Started by pushing a tag openfoam14-runtime-<anything>, or by hand.
+on:
+  push:
+    tags: ["openfoam14-runtime-*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Install OpenFOAM-14 (openfoam.org packages)
+        run: |
+          sudo sh -c "wget -qO - https://dl.openfoam.org/gpg.key > /etc/apt/trusted.gpg.d/openfoam.asc"
+          sudo add-apt-repository -y http://dl.openfoam.org/ubuntu
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends openfoam14
+
+      - name: Pack
+        id: pack
+        run: |
+          ver=$(dpkg-query -W -f='${Version}' openfoam14)
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          mkdir dist
+          du -sh /opt/openfoam14
+          ls /opt/openfoam14
+          grep -n "FOAM_INST_DIR=\|WM_PROJECT_DIR=" /opt/openfoam14/etc/bashrc | head
+          tar -C /opt -cf - openfoam14 | xz -T0 -6 > "dist/openfoam14-$ver-ubuntu24.04-amd64.tar.xz"
+          # Matching source pack (GPL: corresponding source)
+          wget -q -O "dist/OpenFOAM-14-$ver-source.tar.gz" "http://dl.openfoam.org/source/14.$ver" \
+            || echo "source pack 14.$ver not found" >&2
+          apt-cache depends --no-recommends openfoam14 > dist/DEPENDS.txt
+          { echo "openfoam14 $ver (openfoam.org package for Ubuntu 24.04, amd64), repackaged unchanged."
+            echo "Built: $(date -u +%F)"
+          } > dist/BUILD-INFO.txt
+          ls -l dist
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver=${{ steps.pack.outputs.version }}
+          tag="openfoam14-runtime-$ver"
+          [ "${GITHUB_REF_TYPE}" = tag ] && tag="${GITHUB_REF_NAME}"
+          gh release create "$tag" dist/* --repo "$GITHUB_REPOSITORY" \
+            --title "OpenFOAM-14 runtime $ver (Ubuntu 24.04, amd64)" \
+            --notes "Unchanged repackaging of the openfoam.org openfoam14 package $ver, with its source pack. OpenFOAM is GPL-3.0; produced by CFD Direct and released by the OpenFOAM Foundation. Not approved or endorsed by OpenCFD Ltd or the OpenFOAM Foundation." \
+            --prerelease

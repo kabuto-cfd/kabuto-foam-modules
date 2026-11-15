@@ -1,0 +1,21 @@
+#!/bin/sh
+# Build every library of kabuto-foam-modules into $FOAM_USER_LIBBIN.
+# Needs the environment of OpenFOAM-14 (source <OpenFOAM-14>/etc/bashrc).
+cd "${0%/*}" || exit 1
+
+[ -n "$WM_PROJECT_DIR" ] || {
+    echo "Allwmake error: source the OpenFOAM-14 environment first" 1>&2
+    exit 1
+}
+[ "$WM_PROJECT_VERSION" = 14 ] || {
+    echo "Allwmake warning: built for OpenFOAM-14, this is" \
+         "OpenFOAM-$WM_PROJECT_VERSION" 1>&2
+}
+
+# Parse arguments for library compilation (-j, -q, ...)
+. "$WM_PROJECT_DIR/wmake/scripts/AllwmakeParseArguments"
+
+wmake $targetType src/fvConstraints
+
+# Tests (not installed anywhere but $FOAM_USER_APPBIN)
+wmake test/realizableR

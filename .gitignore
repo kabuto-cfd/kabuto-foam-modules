@@ -1,0 +1,17 @@
+# wmake output
+lnInclude/
+linux*Gcc*/
+linux*Clang*/
+platforms/
+*.o
+*.so
+*.dep
+log.Allwmake
+
+# Tutorial working copies
+tutorials/**/case/
+
+# Editors
+*~
+.*.swp
+.vscode/

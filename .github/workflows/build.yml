@@ -1,0 +1,54 @@
+name: Build and test
+
+# Builds every library against the OpenFOAM-14 package of openfoam.org on
+# Ubuntu 24.04, runs the unit tests and a short tutorial run per module.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  openfoam14:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OpenFOAM-14 (openfoam.org packages)
+        run: |
+          sudo sh -c "wget -qO - https://dl.openfoam.org/gpg.key > /etc/apt/trusted.gpg.d/openfoam.asc"
+          sudo add-apt-repository -y http://dl.openfoam.org/ubuntu
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends openfoam14
+          apt-cache policy openfoam14 | sed -n 1,3p
+
+      - name: Build
+        shell: bash
+        run: |
+          set +e; source /opt/openfoam14/etc/bashrc; set -e
+          ./Allwmake -j 2>&1 | tee log.Allwmake
+          ! grep -E "error|Error" log.Allwmake
+          ls -l "$FOAM_USER_LIBBIN"
+
+      - name: Unit tests
+        shell: bash
+        run: |
+          set +e; source /opt/openfoam14/etc/bashrc; set -e
+          Test-realizableR
+
+      - name: Tutorial runs
+        shell: bash
+        run: |
+          set +e; source /opt/openfoam14/etc/bashrc; set -e
+          tutorials/realizableR/ductSecondaryFlow/Allrun 100
+
+      - name: Logs on failure
+        if: failure()
+        run: tail -n 60 tutorials/*/*/case/log.* || true

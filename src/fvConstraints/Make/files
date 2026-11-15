@@ -1,0 +1,3 @@
+realizableR/realizableR.C
+
+LIB = $(FOAM_USER_LIBBIN)/libkabutoFvConstraints

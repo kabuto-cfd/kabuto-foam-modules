@@ -1,0 +1,37 @@
+#!/bin/sh
+# realizableR on OpenFOAM-14's ductSecondaryFlow tutorial (LRR, square duct).
+# The case is copied from $FOAM_TUTORIALS and the limiter added to its
+# fvConstraints. Usage: ./Allrun [iterations, default 300]
+cd "${0%/*}" || exit 1
+. "$WM_PROJECT_DIR/bin/tools/RunFunctions"
+
+nIter=${1:-300}
+src="$FOAM_TUTORIALS/incompressibleFluid/ductSecondaryFlow"
+[ -d "$src" ] || { echo "Allrun: $src not found" 1>&2; exit 1; }
+
+rm -rf case && cp -r "$src" case && cd case || exit 1
+
+# Insert the limiter before the end of the upstream fvConstraints
+sed -i '/^\/\/ \*\*\*\*/i\
+realizableR\
+{\
+    type        realizableR;\
+    libs        ("libkabutoFvConstraints.so");\
+    field       R;\
+    minEigenvalue          1e-6;\
+    relativeMinEigenvalue  1e-3;\
+}\
+' system/fvConstraints
+
+foamDictionary -entry endTime -set "$nIter" system/controlDict > /dev/null
+foamDictionary -entry writeInterval -set "$nIter" system/controlDict > /dev/null
+
+runApplication blockMesh
+runApplication foamRun
+
+# The library must have been loaded and the constraint applied every iteration
+grep -q "realizableR realizableR: .* cells clipped" log.foamRun || {
+    echo "Allrun: realizableR did not run (see case/log.foamRun)" 1>&2
+    exit 1
+}
+grep "cells clipped" log.foamRun | tail -1
