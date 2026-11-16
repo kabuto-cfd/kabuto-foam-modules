@@ -6,3 +6,4 @@ wclean src/momentumTransportModels
 wclean src/wallFunctions
 wclean test/realizableR
 wclean test/wallLaw
+wclean test/sigma

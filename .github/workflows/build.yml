@@ -43,6 +43,7 @@ jobs:
           set +e; source /opt/openfoam14/etc/bashrc; set -e
           Test-realizableR
           Test-wallLaw
+          Test-sigma
 
       - name: Tutorial runs
         shell: bash
@@ -53,6 +54,7 @@ jobs:
           tutorials/stressOmega/channel395/Allrun
           tutorials/wallFunctions/channelYPlus/Allrun
           tutorials/wallFunctions/pitzDailySteady/Allrun nes2l
+          tutorials/sigma/channel395/Allrun
 
       - name: Logs on failure
         if: failure()

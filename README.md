@@ -13,6 +13,7 @@ through `libs (...)`; nothing in OpenFOAM itself is changed.
 | [`nut/epsilon/omegaNonEquilibriumWallFunction`](src/wallFunctions/nutNonEquilibriumWallFunction/nutNonEquilibriumWallFunctionFvPatchScalarField.H) | `libkabutoWallFunctions.so` | Kim & Choudhury's non-equilibrium wall functions: log law sensitised to the pressure gradient along the wall, production and dissipation in the wall cell averaged over a two-layer profile; first cell in the log layer |
 | [`nut/epsilon/omegaNonEquilibriumSpaldingWallFunction`](src/wallFunctions/nutNonEquilibriumSpaldingWallFunction/nutNonEquilibriumSpaldingWallFunctionFvPatchScalarField.H) | `libkabutoWallFunctions.so` | y⁺-insensitive version: Spalding's law with the same pressure-gradient correction, production from the Spalding profile under the local total stress; first cell anywhere from y⁺ ≈ 1 to the log layer |
 | [`twoLayerEpsilon`](src/wallFunctions/twoLayerEpsilon/twoLayerEpsilon.H) | `libkabutoWallFunctions.so` | fvConstraint: Wolfstein's two-layer ε and ν_t in the viscosity-affected cells (Re_y < 200), which ε models need to be y⁺-insensitive |
+| [`sigma`](src/momentumTransportModels/LES/sigma/sigma.H) | `libkabutoMomentumTransportModels.so` | Nicoud et al.'s σ subgrid-scale model (2011): eddy viscosity from the singular values of the velocity gradient; zero in pure shear and, unlike WALE, in solid-body rotation (vortex cores, swirl); y³ at walls without damping; incompressible and compressible |
 
 Planned: solver modules for `foamRun`.
 
@@ -91,6 +92,39 @@ Checks (`tutorials/stressOmega/`):
   stressOmega needed 14 931 SIMPLE iterations to the tutorial's residual targets, LRR 5 207.
 
 The compressible variant is built and registered but not yet run on a test case.
+
+### sigma
+
+WALE's eddy viscosity vanishes in pure shear and decays as y³ at a wall, but it does not vanish
+in solid-body rotation: in a forced vortex (the core of a cyclone or a swirl tube, which
+laminarises) it returns a subgrid viscosity proportional to the rotation rate. Smagorinsky's
+model has the opposite defect. The σ model of Nicoud et al. (2011) is built from the singular
+values σ1 ≥ σ2 ≥ σ3 of the resolved velocity gradient g and vanishes in both:
+
+```
+nut     = (Cσ Δ)² Dσ,   Dσ = σ3 (σ1 − σ2)(σ2 − σ3)/σ1²
+k       = (nut/(Ck Δ))²,   ε = Ce k^(3/2)/Δ
+```
+
+σ1, σ2 come in closed form from the invariants of gᵀg; σ3 = |det g|/(σ1 σ2), which keeps the
+zero of Dσ for two-dimensional gradients and its y³ decay exact (its own square root would carry
+√ε round-off). Cσ = 1.35 is the value of the reference; implementations that write
+nut = C Δ² Dσ with C = 1.68 correspond to Cσ = 1.30.
+
+```
+LES { model sigma; delta cubeRootVol; cubeRootVol { deltaCoeff 1; } }   // momentumTransport
+
+libs ("libkabutoMomentumTransportModels.so");                            // controlDict
+```
+
+Checks: `Test-sigma` (singular values against the eigenvalues of gᵀg for 2000 random tensors,
+Dσ(diag(3, 2, 1)) = 1/9, invariance under rotation, Dσ = 0 for pure shear, rotation about any
+axis, isotropic and axisymmetric expansion and two-dimensional gradients, order 2.99 of the
+decay at a no-slip wall from a Taylor expansion that satisfies continuity);
+`tutorials/sigma/channel395/Allrun [steps]` runs OpenFOAM-14's wall-resolved channel with the
+model switched from WALE.
+
+Reference: Nicoud, Baya Toda, Cabrit, Bose & Lee (2011), Phys. Fluids 23, 085106.
 
 ### Non-equilibrium wall functions
 
@@ -177,6 +211,9 @@ The libraries go to `$FOAM_USER_LIBBIN`, which OpenFOAM searches when a case nam
 - `tutorials/stressOmega/channel395/Allrun` runs the wall-resolved channel and fails when Re_τ
   is more than 3 % off Dean's correlation.
 - `Test-wallLaw` checks the laws of the wall used by the wall functions.
+- `Test-sigma` checks the σ model's operator; `tutorials/sigma/channel395/Allrun [steps]` runs
+  the wall-resolved channel with σ and fails when it was not selected or gives no subgrid
+  viscosity.
 - `tutorials/wallFunctions/channelYPlus/Allrun [-all]` runs the channel y⁺ sweep and fails when
   a y⁺-insensitive treatment is more than 6 % off; `tutorials/wallFunctions/pitzDailySteady/Allrun
   [std|ne|nes|nes2l]` runs the backward-facing step and fails when it does not reattach between
