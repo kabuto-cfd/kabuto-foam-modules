@@ -1,0 +1,44 @@
+#!/bin/sh
+# sigma on OpenFOAM-14's channel395 tutorial (wall-resolved LES of a plane
+# channel at Re_tau = 395, WALE upstream): the model switched to sigma, a short
+# serial run from the upstream developed field. Fails when sigma was not
+# selected, the run did not finish, or the subgrid viscosity is not positive in
+# the turbulent channel.
+# Usage: ./Allrun [time steps, default 50]
+cd "${0%/*}" || exit 1
+. "$WM_PROJECT_DIR/bin/tools/RunFunctions"
+
+nSteps=${1:-50}
+src="$FOAM_TUTORIALS/incompressibleFluid/channel395"
+[ -d "$src" ] || { echo "Allrun: $src not found" 1>&2; exit 1; }
+
+rm -rf case && cp -r "$src" case && cd case || exit 1
+
+sed -i 's/^\( *\)model\( *\)WALE;/\1model\2sigma;/' constant/momentumTransport
+foamDictionary -entry libs -set '("libkabutoMomentumTransportModels.so")' \
+    system/controlDict > /dev/null
+endTime=$(awk "BEGIN { print $nSteps*0.2 }")
+foamDictionary -entry endTime -set "$endTime" system/controlDict > /dev/null
+foamDictionary -entry writeInterval -set "$nSteps" system/controlDict > /dev/null
+rm -f system/functions
+
+runApplication blockMesh
+runApplication foamRun
+
+grep -q "Selecting LES turbulence model sigma" log.foamRun || {
+    echo "Allrun: sigma was not selected (see case/log.foamRun)" 1>&2
+    exit 1
+}
+grep -q "^End" log.foamRun || {
+    echo "Allrun: the run did not finish (see case/log.foamRun)" 1>&2
+    exit 1
+}
+
+runApplication foamPostProcess -func 'volAverage(nut)' -latestTime
+nutMean=$(grep 'of nut =' log.foamPostProcess | tail -1 | awk '{ print $NF }')
+[ -n "$nutMean" ] || { echo "Allrun: no volume-averaged nut" 1>&2; exit 1; }
+awk "BEGIN { exit !($nutMean > 1e-7) }" || {
+    echo "Allrun: volume-averaged nut $nutMean is not positive" 1>&2
+    exit 1
+}
+echo "sigma ran $nSteps steps, volume-averaged nut $nutMean m^2/s (nu 2e-5)"

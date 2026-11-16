@@ -7,8 +7,8 @@ License
     distributed under the GNU General Public License version 3 or later.
 
 Description
-    Run-time selection of the RAS models of libkabutoMomentumTransportModels
-    for incompressible flows.
+    Run-time selection of the RAS and LES models of
+    libkabutoMomentumTransportModels for incompressible flows.
 
 \*---------------------------------------------------------------------------*/
 
@@ -19,6 +19,9 @@ Description
 
 #include "stressOmega.H"
 makeRASModel(stressOmega);
+
+#include "sigma.H"
+makeLESModel(sigma);
 
 
 // ************************************************************************* //

@@ -22,3 +22,4 @@ wmake $targetType src/wallFunctions
 # Tests (not installed anywhere but $FOAM_USER_APPBIN)
 wmake test/realizableR
 wmake test/wallLaw
+wmake test/sigma
