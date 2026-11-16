@@ -10,6 +10,7 @@ log.Allwmake
 
 # Tutorial working copies
 tutorials/**/case/
+tutorials/**/src395/
 
 # Editors
 *~

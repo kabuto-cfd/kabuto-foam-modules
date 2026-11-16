@@ -1,0 +1,91 @@
+#!/bin/sh
+# nutSpaldingLESWallFunction in a wall-modelled LES of a plane channel at
+# Re_tau ~ 2000 (Dean's correlation), built from OpenFOAM-14's channel395
+# tutorial: the same box (4 x 2 x 2, h = 1) on a coarse uniform grid of
+# 40 x 30 x 30 cells (wall cell centre at y+ ~ 67, dx+ ~ 200, dz+ ~ 133),
+# nu lowered to 3.07e-6, WALE, and the wall model fed with the velocity of the
+# second cell layer, filtered in time (Tf = 4 s, about 4 times the time the
+# flow takes to cross a wall cell). The upstream developed Re_tau 395
+# field is mapped as the initial condition.
+#
+# Usage: ./Allrun [time steps, default 300]   short run: fails when the wall
+#                                             function did not act
+#        ./Allrun -full                       16000 steps (about 45 min serial),
+#                                             fails when Re_tau is more than
+#                                             3 % off Dean's correlation
+cd "${0%/*}" || exit 1
+. "$WM_PROJECT_DIR/bin/tools/RunFunctions"
+
+full=false
+nSteps=${1:-300}
+[ "$1" = "-full" ] && { full=true; nSteps=16000; }
+src="$FOAM_TUTORIALS/incompressibleFluid/channel395"
+[ -d "$src" ] || { echo "Allrun: $src not found" 1>&2; exit 1; }
+
+fail() { echo "Allrun: $*" 1>&2; exit 1; }
+
+# The upstream mesh and developed field, the source of mapFields
+rm -rf src395 case
+cp -r "$src" src395 && (cd src395 && runApplication blockMesh) || exit 1
+
+cp -r "$src" case && cd case || exit 1
+rm -rf 0 && cp -r 0.orig 0
+
+sed -i \
+    -e 's/(40 25 30) simpleGrading (1 10.7028 1)/(40 15 30) simpleGrading (1 1 1)/' \
+    -e 's/(40 25 30) simpleGrading (1 0.0934 1)/(40 15 30) simpleGrading (1 1 1)/' \
+    system/blockMeshDict
+grep -q "(40 15 30) simpleGrading (1 1 1)" system/blockMeshDict \
+    || fail "upstream blockMeshDict changed; grid not set"
+
+foamDictionary -entry nu -set 3.07e-06 constant/physicalProperties > /dev/null
+
+for wall in bottomWall topWall
+do
+    foamDictionary -entry boundaryField/$wall -set \
+        '{ type nutSpaldingLESWallFunction; sampleLayer 2; Tf 4; value uniform 0; }' \
+        0/nut > /dev/null
+done
+
+foamDictionary -entry libs -set '("libkabutoWallFunctions.so")' \
+    system/controlDict > /dev/null
+endTime=$(awk "BEGIN { print $nSteps*0.2 }")
+foamDictionary -entry endTime -set "$endTime" system/controlDict > /dev/null
+foamDictionary -entry writeInterval -set "$nSteps" system/controlDict > /dev/null
+rm -f system/functions
+
+runApplication blockMesh
+runApplication mapFields ../src395 -sourceTime 0 -consistent
+runApplication foamRun
+
+grep -q "^End" log.foamRun || fail "the run did not finish (see case/log.foamRun)"
+
+# The sampling report of both walls: second layer, no walk stopped early
+n=$(grep -c "nutSpaldingLESWallFunction .*Wall: sample layer 2,.* stopped early on 0 of 1200 faces" \
+    log.foamRun)
+[ "$n" -ge 2 ] || fail "no sampling report of nutSpaldingLESWallFunction on both walls"
+
+# The filtered input velocity written with the field, for restarts
+for wall in bottomWall topWall
+do
+    foamDictionary -entry boundaryField/$wall/Uf "$endTime/nut" > /dev/null 2>&1 \
+        || fail "$wall: no filtered velocity Uf in $endTime/nut"
+done
+
+# Re_tau = u_tau h/nu (h = 1) from the driving pressure gradient (= u_tau^2/h)
+# over the second half of the run; Dean: Re_tau = 0.09 Re_b^0.88, Re_b = 2 h U_b/nu
+ReTau=$(awk '
+    /pressure gradient =/ { g[++n] = $NF }
+    END { for (i = int(n/2) + 1; i <= n; i++) { s += g[i]; m++ }
+          if (m) printf "%.0f", sqrt(s/m)/3.07e-06 }' log.foamRun)
+[ -n "$ReTau" ] || fail "no pressure gradient in case/log.foamRun"
+ReTauDean=$(awk 'BEGIN { printf "%.0f", 0.09*(2*0.1335/3.07e-06)^0.88 }')
+dev=$(awk "BEGIN { printf \"%+.1f\", 100*($ReTau/$ReTauDean - 1) }")
+
+echo "nutSpaldingLESWallFunction ran $nSteps steps: Re_tau $ReTau, Dean $ReTauDean ($dev %)"
+
+if $full
+then
+    awk "BEGIN { d = $dev; exit !(d > -3 && d < 3) }" \
+        || fail "Re_tau $ReTau is more than 3 % off Dean's $ReTauDean"
+fi

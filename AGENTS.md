@@ -57,7 +57,7 @@ set +e; source /opt/openfoam14/etc/bashrc; set -e
 ./Allwmake -j 2 && Test-realizableR && tutorials/realizableR/ductSecondaryFlow/Allrun 100
 tutorials/stressOmega/ductSecondaryFlow/Allrun 300 && tutorials/stressOmega/channel395/Allrun
 Test-wallLaw && tutorials/wallFunctions/channelYPlus/Allrun && tutorials/wallFunctions/pitzDailySteady/Allrun nes2l
-Test-sigma && tutorials/sigma/channel395/Allrun
+Test-sigma && tutorials/sigma/channel395/Allrun && tutorials/wallFunctions/channelWMLES/Allrun
 ```
 
 ## Code conventions

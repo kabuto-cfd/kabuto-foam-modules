@@ -55,6 +55,7 @@ jobs:
           tutorials/wallFunctions/channelYPlus/Allrun
           tutorials/wallFunctions/pitzDailySteady/Allrun nes2l
           tutorials/sigma/channel395/Allrun
+          tutorials/wallFunctions/channelWMLES/Allrun
 
       - name: Logs on failure
         if: failure()
