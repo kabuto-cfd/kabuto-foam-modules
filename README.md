@@ -14,6 +14,7 @@ through `libs (...)`; nothing in OpenFOAM itself is changed.
 | [`nut/epsilon/omegaNonEquilibriumSpaldingWallFunction`](src/wallFunctions/nutNonEquilibriumSpaldingWallFunction/nutNonEquilibriumSpaldingWallFunctionFvPatchScalarField.H) | `libkabutoWallFunctions.so` | y⁺-insensitive version: Spalding's law with the same pressure-gradient correction, production from the Spalding profile under the local total stress; first cell anywhere from y⁺ ≈ 1 to the log layer |
 | [`twoLayerEpsilon`](src/wallFunctions/twoLayerEpsilon/twoLayerEpsilon.H) | `libkabutoWallFunctions.so` | fvConstraint: Wolfstein's two-layer ε and ν_t in the viscosity-affected cells (Re_y < 200), which ε models need to be y⁺-insensitive |
 | [`sigma`](src/momentumTransportModels/LES/sigma/sigma.H) | `libkabutoMomentumTransportModels.so` | Nicoud et al.'s σ subgrid-scale model (2011): eddy viscosity from the singular values of the velocity gradient; zero in pure shear and, unlike WALE, in solid-body rotation (vortex cores, swirl); y³ at walls without damping; incompressible and compressible |
+| [`nutSpaldingLESWallFunction`](src/wallFunctions/nutSpaldingLESWallFunction/nutSpaldingLESWallFunctionFvPatchScalarField.H) | `libkabutoWallFunctions.so` | Wall-stress model for wall-modelled LES: Spalding's law fed with the velocity of a cell layer away from the wall and / or filtered in time, the remedies for the log-layer mismatch |
 
 Planned: solver modules for `foamRun`.
 
@@ -189,6 +190,63 @@ Spalding (1961), J. Appl. Mech. 28, 455. Kader (1981), Int. J. Heat Mass Transfe
 Popovac & Hanjalić (2007), Flow Turbul. Combust. 78, 177. Wolfshtein (1969), Int. J. Heat
 Mass Transfer 12, 301.
 
+### nutSpaldingLESWallFunction
+
+In a wall-modelled LES the first cell sits in the log layer and a wall function supplies the wall
+stress. Fed with the instantaneous velocity of the wall cell itself (`nutUSpaldingWallFunction`),
+the modelled stress follows the same cell's fluctuations, the resolved turbulence next to the
+wall is damped, and the mean velocity of the cells above lies above the log law: the log-layer
+mismatch (Kawai & Larsson 2012; Yang, Park & Moin 2017). The wall stress is then too low for the
+flow outside. This boundary condition takes the input velocity of Spalding's law elsewhere:
+
+- `sampleLayer n`: from the cell n layers from the wall (1 = the wall cell), found by walking
+  from the wall cell through the face whose normal is closest to the wall normal (the cell
+  straight above in prism layers); the walk stops early at a processor or domain boundary and
+  the start of the run reports on how many faces it did;
+- `Tf`: through an exponential time filter, U_f ← (1 − ε) U_f + ε U_s with ε = Δt/T_f, once per
+  time step; U_f is written with the field so that a restart continues it.
+
+```
+uτ: y_s uτ/ν = y⁺(|U_in|/uτ) (Spalding),   ν_t,w = max(uτ²/|∂U/∂n|_w − ν, 0)
+```
+
+with y_s the distance of the sample cell centre from the wall and U_in its wall-parallel velocity
+relative to the wall (filtered if `Tf` > 0). With `sampleLayer 1` and `Tf 0` it is
+`nutUSpaldingWallFunction`. No coefficient is added; κ = 0.41, E = 9.8 as upstream.
+
+```
+wall { type nutSpaldingLESWallFunction; sampleLayer 2; Tf 4; value uniform 0; }   // 0/nut
+
+libs ("libkabutoWallFunctions.so");                                                // controlDict
+```
+
+Check: plane channel at Re_τ ≈ 2000 (Dean) built from OpenFOAM-14's `channel395` (4 × 2 × 2) on a
+coarse uniform grid of 40 × 30 × 30 cells (wall-cell centre at y⁺ ≈ 67, Δx⁺ ≈ 200, Δz⁺ ≈ 133),
+16 000 steps (≈ 20 h/u_τ), Re_τ from the driving pressure gradient and the log-layer mismatch
+(U₂ − U₁ against the log law, relative to U₂; Yang et al.) from the mean profile over the second
+half. T_f = 4 s is about 4 times the time the flow takes to cross a wall cell.
+
+| wall model | SGS | Re_τ vs Dean | τ_w / Dean | mismatch |
+|---|---|---|---|---|
+| `nutUSpaldingWallFunction` (upstream) | WALE | −3.3 % | 0.935 | +7.7 % |
+| `sampleLayer 1` (same as upstream) | WALE | −3.7 % | 0.927 | +8.0 % |
+| `Tf 4` | WALE | −2.4 % | 0.953 | +5.2 % |
+| `Tf 15` | WALE | −2.6 % | 0.949 | +4.6 % |
+| `sampleLayer 2` | WALE | +1.4 % | 1.028 | +6.3 % |
+| `sampleLayer 3` | WALE | −2.1 % | 0.959 | +5.2 % |
+| `sampleLayer 2; Tf 4` | WALE | +0.2 % | 1.003 | +4.8 % |
+| `sampleLayer 1` | σ | −6.1 % | 0.881 | +10.2 % |
+| `sampleLayer 2; Tf 4` | σ | −0.6 % | 0.989 | +7.7 % |
+
+The sample layer moves the wall stress most, the time filter adds a little, and together they
+remove the friction deficit; σ, whose eddy viscosity vanishes in near-wall shear, makes the
+mismatch worse with the wall cell as input and needs the remedy more. Differences of 1–2 % are
+within the scatter of a run of this length. `tutorials/wallFunctions/channelWMLES/Allrun -full`
+reruns the `sampleLayer 2; Tf 4` / WALE case and fails when Re_τ is more than 3 % off.
+
+References: Kawai & Larsson (2012), Phys. Fluids 24, 015105. Yang, Park & Moin (2017), Phys. Rev.
+Fluids 2, 104601. Spalding (1961), J. Appl. Mech. 28, 455.
+
 ## Build
 
 ```bash
@@ -214,6 +272,10 @@ The libraries go to `$FOAM_USER_LIBBIN`, which OpenFOAM searches when a case nam
 - `Test-sigma` checks the σ model's operator; `tutorials/sigma/channel395/Allrun [steps]` runs
   the wall-resolved channel with σ and fails when it was not selected or gives no subgrid
   viscosity.
+- `tutorials/wallFunctions/channelWMLES/Allrun [steps | -full]` runs the wall-modelled LES channel
+  with `nutSpaldingLESWallFunction` and fails when the wall function did not sample both walls
+  or write its filtered velocity; `-full` (about 45 min) also fails when Re_τ is more than 3 %
+  off Dean's correlation.
 - `tutorials/wallFunctions/channelYPlus/Allrun [-all]` runs the channel y⁺ sweep and fails when
   a y⁺-insensitive treatment is more than 6 % off; `tutorials/wallFunctions/pitzDailySteady/Allrun
   [std|ne|nes|nes2l]` runs the backward-facing step and fails when it does not reattach between
