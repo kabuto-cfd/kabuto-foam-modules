@@ -16,17 +16,23 @@ GPL-3.0-or-later. Everything here links OpenFOAM and is GPL.
   `LIB = $(FOAM_USER_LIBBIN)/libkabuto<Area>` (e.g. `libkabutoFvConstraints`). A new area is one
   more `wmake $targetType src/<area>` line in `Allwmake` (and `wclean` in `Allwclean`).
   - `src/fvConstraints/realizableR` Reynolds-stress realizability limiter (eigenvalue clipping)
-  - `src/momentumTransportModels` RAS models, `libkabutoMomentumTransportModels`: the model
-    templates under `RAS/<model>/`, registered for incompressible and compressible flows by
-    `incompressible/` and `compressible/` (one `makeRASModel(<model>)` line each). Cases load it
-    with `libs ("libkabutoMomentumTransportModels.so");` in `system/controlDict`.
+  - `src/momentumTransportModels` RAS and LES models, `libkabutoMomentumTransportModels`: the
+    model templates under `RAS/<model>/` and `LES/<model>/`, registered for incompressible and
+    compressible flows by `incompressible/` and `compressible/` (one `makeRASModel(<model>)` or
+    `makeLESModel(<model>)` line each). Cases load it with
+    `libs ("libkabutoMomentumTransportModels.so");` in `system/controlDict`.
     - `RAS/stressOmega` Wilcox's stress-omega Reynolds-stress model (2006)
+    - `LES/sigma` Nicoud et al.'s sigma SGS model (2011); its point-wise operator in
+      `sigmaOperator.H` (inline, unit-tested by `test/sigma`)
   - `src/wallFunctions` wall functions, `libkabutoWallFunctions`: the point-wise laws in
     `wallLaw/wallLaw.H` (inline, unit-tested by `test/wallLaw`), two families of nut / epsilon /
     omega boundary conditions and the `twoLayerEpsilon` fvConstraint:
     - `*NonEquilibriumWallFunction` Kim & Choudhury (log layer, two-layer averages in the wall cell)
     - `*NonEquilibriumSpaldingWallFunction` y+-insensitive (Spalding's law with the same
       pressure-gradient correction); epsilon models add `twoLayerEpsilon` for cells inside y+ ~ 30
+    - `nutSpaldingLESWallFunction` wall-stress model for wall-modelled LES: Spalding's law fed
+      with a velocity sampled `sampleLayer` cells from the wall and / or filtered in time (`Tf`),
+      the remedies for the log-layer mismatch; the filtered velocity is written with the field
     The epsilon / omega classes derive from copies of OpenFOAM's epsilon / omegaWallFunction with
     `calculate` made virtual; the Spalding ones override only `calculate`. All walls of a case use
     one family (OpenFOAM handles the wall cells of all wall-function patches from one master patch).
@@ -51,6 +57,7 @@ set +e; source /opt/openfoam14/etc/bashrc; set -e
 ./Allwmake -j 2 && Test-realizableR && tutorials/realizableR/ductSecondaryFlow/Allrun 100
 tutorials/stressOmega/ductSecondaryFlow/Allrun 300 && tutorials/stressOmega/channel395/Allrun
 Test-wallLaw && tutorials/wallFunctions/channelYPlus/Allrun && tutorials/wallFunctions/pitzDailySteady/Allrun nes2l
+Test-sigma && tutorials/sigma/channel395/Allrun
 ```
 
 ## Code conventions
