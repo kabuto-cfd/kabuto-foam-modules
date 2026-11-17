@@ -117,6 +117,24 @@ int main()
         check(mag(r - minEig*symmTensor::I) < 1e-15, "minEigenvalue*I");
     }
 
+    Info<< "very large tensor (diverging run: the cubic of R overflows)" << nl;
+    {
+        const scalar big = 1e150;
+        const symmTensor r0 = rotated(vector(-0.5, 2, 3));
+        symmTensor r1 = r0;
+        fv::realizableR::clip(r1, minEig, relEig);
+
+        symmTensor r = big*r0;
+        check(fv::realizableR::clip(r, minEig, relEig), "clipped");
+        bool finite = true;
+        for (direction c = 0; c < symmTensor::nComponents; c++)
+        {
+            finite = finite && std::isfinite(r[c]);
+        }
+        check(finite, "finite");
+        check(mag(r/big - r1) < tol, "= big*(clipped tensor)");
+    }
+
     Info<< "10000 random tensors" << nl;
     {
         // Small linear congruential generator: the same numbers everywhere

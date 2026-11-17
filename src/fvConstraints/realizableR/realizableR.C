@@ -23,6 +23,7 @@ License
 #include "realizableR.H"
 #include "volFields.H"
 #include "addToRunTimeSelectionTable.H"
+#include <cmath>
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
@@ -162,23 +163,32 @@ bool Foam::fv::realizableR::clip
     const scalar relativeMinEigenvalue
 )
 {
+    // Work on r scaled by its largest component: the cubic of the analytical
+    // eigenvalues and the squares in the Jacobi rotations overflow for very
+    // large R (a diverging run) otherwise
+    const scalar s = max(cmptMax(cmptMag(r)), vSmall);
+    const symmTensor rs(r/s);
+
     const scalar floor =
-        max(minEigenvalue, relativeMinEigenvalue*max(tr(r), 0)/3);
+        max(minEigenvalue, relativeMinEigenvalue*max(tr(r), 0)/3)/s;
 
     // Cheap test first: OpenFOAM's analytical eigenvalues
-    if (cmptMin(eigenValues(r)) >= floor)
+    if (cmptMin(eigenValues(rs)) >= floor)
     {
         return false;
     }
 
     vector lambda;
     tensor ev;
-    jacobiEigen(r, lambda, ev);
+    jacobiEigen(rs, lambda, ev);
 
     r =
-        max(lambda.x(), floor)*sqr(ev.x())
-      + max(lambda.y(), floor)*sqr(ev.y())
-      + max(lambda.z(), floor)*sqr(ev.z());
+        s
+       *(
+            max(lambda.x(), floor)*sqr(ev.x())
+          + max(lambda.y(), floor)*sqr(ev.y())
+          + max(lambda.z(), floor)*sqr(ev.z())
+        );
 
     return true;
 }
@@ -195,23 +205,105 @@ Foam::wordList Foam::fv::realizableR::constrainedFields() const
 bool Foam::fv::realizableR::constrain(volSymmTensorField& R) const
 {
     symmTensorField& Ri = R.primitiveFieldRef();
+    const scalarField& V = mesh().V();
+    const vectorField& C = mesh().C();
 
-    label nClipped = 0;
+    // Stop with the location rather than a floating-point exception in the
+    // eigenvalue computation when R is not finite
+    label nNonFinite = 0;
+    label firstNonFinite = -1;
 
     forAll(Ri, celli)
     {
+        const symmTensor& r = Ri[celli];
+
+        for (direction cmpt = 0; cmpt < symmTensor::nComponents; cmpt++)
+        {
+            if (!std::isfinite(r[cmpt]))
+            {
+                if (firstNonFinite < 0)
+                {
+                    firstNonFinite = celli;
+                }
+                nNonFinite++;
+                break;
+            }
+        }
+    }
+
+    if (returnReduce(nNonFinite, sumOp<label>()))
+    {
+        if (firstNonFinite >= 0)
+        {
+            Pout<< type() << ' ' << name() << ": " << nNonFinite
+                << " cells with non-finite " << fieldName_
+                << ", first: cell " << firstNonFinite
+                << " at " << C[firstNonFinite]
+                << ", " << fieldName_ << " = " << Ri[firstNonFinite] << endl;
+        }
+
+        FatalErrorInFunction
+            << "Non-finite " << fieldName_ << " in "
+            << returnReduce(nNonFinite, sumOp<label>()) << " cells"
+            << " (locations above)" << exit(FatalError);
+    }
+
+    label nClipped = 0;
+
+    // Turbulent kinetic energy added by the clipping: tr(R)/2 after - before
+    scalar dkV = 0;
+    scalar kV = 0;
+    scalar dkMax = 0;
+    label celldkMax = -1;
+
+    forAll(Ri, celli)
+    {
+        const scalar tr0 = tr(Ri[celli]);
+        kV += 0.5*tr0*V[celli];
+
         if (clip(Ri[celli], minEigenvalue_, relativeMinEigenvalue_))
         {
             nClipped++;
+
+            const scalar dk = 0.5*(tr(Ri[celli]) - tr0);
+            dkV += dk*V[celli];
+
+            if (dk > dkMax)
+            {
+                dkMax = dk;
+                celldkMax = celli;
+            }
         }
     }
 
     R.correctBoundaryConditions();
 
+    // Location of the largest added k over all processors
+    const scalar dkMaxAll = returnReduce(dkMax, maxOp<scalar>());
+    vector CdkMax(-great*vector::one);
+    scalar kdkMax = -great;
+    if (celldkMax >= 0 && dkMax == dkMaxAll)
+    {
+        CdkMax = C[celldkMax];
+        kdkMax = 0.5*tr(Ri[celldkMax]) - dkMax;
+    }
+    reduce(CdkMax, maxOp<vector>());
+    reduce(kdkMax, maxOp<scalar>());
+
     Info<< type() << ' ' << name() << ": "
         << returnReduce(nClipped, sumOp<label>()) << " of "
-        << returnReduce(Ri.size(), sumOp<label>()) << " cells clipped"
-        << endl;
+        << returnReduce(Ri.size(), sumOp<label>()) << " cells clipped, "
+        << "k added (volume integral) "
+        << returnReduce(dkV, sumOp<scalar>())/max(returnReduce(kV, sumOp<scalar>()), vSmall)
+        << " of the total";
+
+    if (dkMaxAll > 0)
+    {
+        Info<< ", max " << dkMaxAll << " (k before " << kdkMax
+            << ") at " << CdkMax;
+    }
+
+    Info<< endl;
 
     return true;
 }

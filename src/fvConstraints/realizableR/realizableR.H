@@ -44,7 +44,12 @@ Description
 
     The eigenvectors of a clipped cell come from Jacobi rotations, which keep
     them orthonormal for repeated eigenvalues (Foam::eigenVectors returns the
-    same vector twice there). Other cells and the boundary values are not
+    same vector twice there). The eigenvalues are computed for R divided by
+    its largest component, so a diverging R does not overflow. Raising an
+    eigenvalue adds to tr(R): the log line reports the k added (volume
+    integral, as a fraction of the total k) and the largest addition in a
+    cell with its location. A non-finite R stops the run with the location
+    of the first such cell. Other cells and the boundary values are not
     changed. The Reynolds-stress
     models (LRR, SSG) call fvConstraints::constrain(R) right after solving
     for R, which is where this applies.
