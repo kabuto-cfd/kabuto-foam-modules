@@ -42,8 +42,8 @@ GPL-3.0-or-later. Everything here links OpenFOAM and is GPL.
   upstream tutorial from `$FOAM_TUTORIALS` in `Allrun` and adding to it over committing a copy;
   `Allrun` must fail (non-zero exit) when the module did not act. Working copies (`case/`) are
   ignored by git. A case of our own (no upstream equivalent) is committed in full and its
-  `Allrun` checks a number against a reference (`stressOmega/channel395`: Re_tau against Dean's
-  correlation); its outputs are ignored by git.
+  `Allrun` checks a number against a reference (`stressOmega/channel395`: Re_tau against the DNS
+  of Moser, Kim & Mansour); its outputs are ignored by git.
 - `.github/workflows/build.yml` builds against the openfoam.org `openfoam14` package (Ubuntu
   24.04) and runs the tests and tutorials. Markdown-only and `docs/` changes start no run.
 

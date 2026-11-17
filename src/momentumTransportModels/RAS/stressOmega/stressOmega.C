@@ -224,7 +224,11 @@ void stressOmega<BasicMomentumTransportModel>::correct()
     // Production tensor, its counterpart with the transposed velocity
     // gradient (LRR-QI), and the production of k
     volSymmTensorField P(-twoSymm(R & gradU));
-    volSymmTensorField D(-twoSymm(R & gradU.T()));
+    // D = -twoSymm(R & gradU^T) is written as -twoSymm(gradU & R) (the same
+    // tensor) so that no operand of the inner product is a temporary:
+    // R & gradU.T() computes the product in the storage of the temporary
+    // gradU.T() and returns wrong off-diagonal components (OpenFOAM-14).
+    volSymmTensorField D(-twoSymm(gradU & R));
     volScalarField::Internal G(this->GName(), 0.5*tr(P()));
 
     // Update omega and G at the wall

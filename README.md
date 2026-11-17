@@ -82,8 +82,8 @@ and `div(phi,omega)`.
 Checks (`tutorials/stressOmega/`):
 
 - `channel395`: plane channel integrated to the wall (first cell at y+ ≈ 0.8) at
-  Re_b = 13 750. Re_τ = 400.5 against 399 from Dean's correlation (k-ω 2006 on the same mesh:
-  388.6); U⁺ follows y⁺ below y⁺ ≈ 5 and the log law (κ = 0.41, B = 5.0) within 0.4 at
+  Re_b = 13 750. Re_τ = 385.4 against 392 from the DNS of Moser, Kim & Mansour (1999) (k-ω 2006 on
+  the same mesh: 388.6); U⁺ follows y⁺ below y⁺ ≈ 5 and the log law (κ = 0.41, B = 5.0) within 1.2 at
   y⁺ = 30–200; the normal stresses come out anisotropic in the right order
   (⟨u'u'⟩ > ⟨w'w'⟩ > ⟨v'v'⟩).
 - `ductSecondaryFlow`: OpenFOAM's duct tutorial (wall functions) with the model switched from
@@ -267,7 +267,7 @@ The libraries go to `$FOAM_USER_LIBBIN`, which OpenFOAM searches when a case nam
 - `tutorials/stressOmega/ductSecondaryFlow/Allrun [iterations]` runs the same duct with
   stressOmega.
 - `tutorials/stressOmega/channel395/Allrun` runs the wall-resolved channel and fails when Re_τ
-  is more than 3 % off Dean's correlation.
+  is more than 3 % off the DNS of Moser, Kim & Mansour (1999).
 - `Test-wallLaw` checks the laws of the wall used by the wall functions.
 - `Test-sigma` checks the σ model's operator; `tutorials/sigma/channel395/Allrun [steps]` runs
   the wall-resolved channel with σ and fails when it was not selected or gives no subgrid
