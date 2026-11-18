@@ -227,7 +227,8 @@ void stressOmega<BasicMomentumTransportModel>::correct()
     // D = -twoSymm(R & gradU^T) is written as -twoSymm(gradU & R) (the same
     // tensor) so that no operand of the inner product is a temporary:
     // R & gradU.T() computes the product in the storage of the temporary
-    // gradU.T() and returns wrong off-diagonal components (OpenFOAM-14).
+    // gradU.T() and returns wrong off-diagonal components (OpenFOAM-14 and
+    // -12 at -O3; https://bugs.openfoam.org/view.php?id=4437).
     volSymmTensorField D(-twoSymm(gradU & R));
     volScalarField::Internal G(this->GName(), 0.5*tr(P()));
 
