@@ -273,8 +273,8 @@ The libraries go to `$FOAM_USER_LIBBIN`, which OpenFOAM searches when a case nam
   the wall-resolved channel with σ and fails when it was not selected or gives no subgrid
   viscosity.
 - `tutorials/wallFunctions/channelWMLES/Allrun [steps | -full]` runs the wall-modelled LES channel
-  with `nutSpaldingLESWallFunction` and fails when the wall function did not sample both walls
-  or write its filtered velocity; `-full` (about 45 min) also fails when Re_τ is more than 3 %
+  with `nutSpaldingLESWallFunction` on 4 processors, each holding one of the walls, and fails
+  when the wall function did not sample both walls or write its filtered velocity; `-full` (about 45 min) also fails when Re_τ is more than 3 %
   off Dean's correlation.
 - `tutorials/wallFunctions/channelYPlus/Allrun [-all]` runs the channel y⁺ sweep and fails when
   a y⁺-insensitive treatment is more than 6 % off; `tutorials/wallFunctions/pitzDailySteady/Allrun

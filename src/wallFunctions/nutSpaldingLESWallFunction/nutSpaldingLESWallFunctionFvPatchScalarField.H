@@ -134,6 +134,11 @@ class nutSpaldingLESWallFunctionFvPatchScalarField
         //- Time index of the last filter update
         label filterTimeIndex_;
 
+        //- Whether the sample cells have been found. Not the size of
+        //  sampleCells_: a processor may hold no face of the patch, and every
+        //  processor must take part in the reductions of calcSampling
+        mutable bool sampled_;
+
         //- Sample cell of each face (demand-driven)
         mutable labelList sampleCells_;
 
@@ -145,6 +150,9 @@ class nutSpaldingLESWallFunctionFvPatchScalarField
 
         //- Find the sample cells and distances
         void calcSampling() const;
+
+        //- Find them if not done yet (on every processor)
+        void checkSampling() const;
 
         //- Wall-parallel velocity of the sample cells relative to the wall
         tmp<vectorField> sampleVelocity() const;
