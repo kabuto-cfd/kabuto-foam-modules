@@ -8,11 +8,11 @@
 # flow takes to cross a wall cell). The upstream developed Re_tau 395
 # field is mapped as the initial condition.
 #
-# Usage: ./Allrun [time steps, default 300]   short run on 4 processors split
-#                                             across the channel height (two
-#                                             of them hold no face of a given
-#                                             wall): fails when the wall
-#                                             function did not act
+# Usage: ./Allrun [time steps, default 300]   short run on 2 processors split
+#                                             across the channel height (each
+#                                             holds no face of the other wall):
+#                                             fails when the wall function did
+#                                             not act
 #        ./Allrun -full                       16000 steps (about 45 min serial),
 #                                             fails when Re_tau is more than
 #                                             3 % off Dean's correlation
@@ -63,7 +63,8 @@ if $full
 then
     runApplication foamRun
 else
-    # upstream decomposeParDict: simple (1 2 2)
+    foamDictionary -entry numberOfSubdomains -set 2 system/decomposeParDict > /dev/null
+    foamDictionary -entry simple/n -set "(1 2 1)" system/decomposeParDict > /dev/null
     runApplication decomposePar
     runParallel foamRun
     runApplication reconstructPar -latestTime
