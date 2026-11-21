@@ -90,6 +90,8 @@ void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::calcSampling() const
         ySample_[i] = max(-((C[celli] - Cf[i]) & nf[i]), small);
     }
 
+    sampled_ = true;
+
     const label nFaces = returnReduce(patch().size(), sumOp<label>());
     reduce(nShort, sumOp<label>());
 
@@ -105,13 +107,19 @@ void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::calcSampling() const
 }
 
 
-Foam::tmp<Foam::vectorField>
-Foam::nutSpaldingLESWallFunctionFvPatchScalarField::sampleVelocity() const
+void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::checkSampling() const
 {
-    if (sampleCells_.size() != patch().size())
+    if (!sampled_)
     {
         calcSampling();
     }
+}
+
+
+Foam::tmp<Foam::vectorField>
+Foam::nutSpaldingLESWallFunctionFvPatchScalarField::sampleVelocity() const
+{
+    checkSampling();
 
     const label patchi = patch().index();
     const momentumTransportModel& turbModel =
@@ -156,6 +164,7 @@ Foam::nutSpaldingLESWallFunctionFvPatchScalarField::uTau() const
     const tmp<scalarField> tnuw = turbModel.nu(patchi);
     const scalarField& nuw = tnuw();
 
+    checkSampling();
     const scalarField magUin(mag(inputVelocity()));
 
     tmp<scalarField> tuTau(new scalarField(patch().size(), 0.0));
@@ -225,6 +234,7 @@ nutSpaldingLESWallFunctionFvPatchScalarField
     Tf_(dict.lookupOrDefault<scalar>("Tf", 0)),
     Uf_(),
     filterTimeIndex_(-1),
+    sampled_(false),
     sampleCells_(),
     ySample_()
 {
@@ -255,6 +265,7 @@ nutSpaldingLESWallFunctionFvPatchScalarField
     Tf_(ptf.Tf_),
     Uf_(),
     filterTimeIndex_(-1),
+    sampled_(false),
     sampleCells_(),
     ySample_()
 {
@@ -278,6 +289,7 @@ nutSpaldingLESWallFunctionFvPatchScalarField
     Tf_(wfpsf.Tf_),
     Uf_(wfpsf.Uf_),
     filterTimeIndex_(wfpsf.filterTimeIndex_),
+    sampled_(false),
     sampleCells_(),
     ySample_()
 {}
@@ -295,10 +307,7 @@ Foam::nutSpaldingLESWallFunctionFvPatchScalarField::yPlus() const
     const scalarField& y = turbModel.yb()[patchi];
     const tmp<scalarField> tnuw = turbModel.nu(patchi);
 
-    if (sampleCells_.size() != patch().size())
-    {
-        calcSampling();
-    }
+    checkSampling();
 
     return y*uTau()/tnuw();
 }
@@ -325,6 +334,7 @@ void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::map
         Uf_.clear();
     }
 
+    sampled_ = false;
     sampleCells_.clear();
     ySample_.clear();
 }
@@ -341,6 +351,7 @@ void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::reset
         refCast<const nutSpaldingLESWallFunctionFvPatchScalarField>(ptf);
 
     Uf_ = tiptf.Uf_;
+    sampled_ = false;
     sampleCells_.clear();
     ySample_.clear();
 }

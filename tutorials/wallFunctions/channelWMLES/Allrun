@@ -8,7 +8,10 @@
 # flow takes to cross a wall cell). The upstream developed Re_tau 395
 # field is mapped as the initial condition.
 #
-# Usage: ./Allrun [time steps, default 300]   short run: fails when the wall
+# Usage: ./Allrun [time steps, default 300]   short run on 4 processors split
+#                                             across the channel height (two
+#                                             of them hold no face of a given
+#                                             wall): fails when the wall
 #                                             function did not act
 #        ./Allrun -full                       16000 steps (about 45 min serial),
 #                                             fails when Re_tau is more than
@@ -56,7 +59,15 @@ rm -f system/functions
 
 runApplication blockMesh
 runApplication mapFields ../src395 -sourceTime 0 -consistent
-runApplication foamRun
+if $full
+then
+    runApplication foamRun
+else
+    # upstream decomposeParDict: simple (1 2 2)
+    runApplication decomposePar
+    runParallel foamRun
+    runApplication reconstructPar -latestTime
+fi
 
 grep -q "^End" log.foamRun || fail "the run did not finish (see case/log.foamRun)"
 
