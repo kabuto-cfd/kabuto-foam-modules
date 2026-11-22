@@ -6,5 +6,6 @@ omegaNonEquilibriumWallFunction/omegaNonEquilibriumWallFunctionFvPatchScalarFiel
 omegaNonEquilibriumSpaldingWallFunction/omegaNonEquilibriumSpaldingWallFunctionFvPatchScalarField.C
 nutSpaldingLESWallFunction/nutSpaldingLESWallFunctionFvPatchScalarField.C
 twoLayerEpsilon/twoLayerEpsilon.C
+wallModelledNut/wallModelledNut.C
 
 LIB = $(FOAM_USER_LIBBIN)/libkabutoWallFunctions

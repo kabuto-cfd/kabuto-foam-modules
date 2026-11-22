@@ -167,6 +167,21 @@ inline scalar spaldingUPlus
 }
 
 
+//- Eddy viscosity of Spalding's law, nu_t/nu = dy+/dU+ - 1 at y+: the
+//  total stress (1 + nu_t/nu) dU+/dy+ = 1 of a constant-stress layer
+//  that follows the law. ~ kappa y+ in the log layer, ~ y+^3 at the wall
+inline scalar spaldingNutByNu
+(
+    const scalar yPlus,
+    const scalar kappa,
+    const scalar E
+)
+{
+    return
+        spaldingDYPlusDUPlus(spaldingUPlus(yPlus, kappa, E), kappa, E) - 1;
+}
+
+
 //- Friction velocity from Spalding's law for a velocity U at distance y
 //  (bisection-safeguarded Newton; 0 for U <= 0)
 inline scalar spaldingUTau
