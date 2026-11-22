@@ -44,6 +44,13 @@ void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::calcSampling() const
 
     sampleCells_.setSize(patch().size());
     ySample_.setSize(patch().size());
+    layerCells_.setSize(nWalk());
+    layerY_.setSize(nWalk());
+    forAll(layerCells_, l)
+    {
+        layerCells_[l] = labelList(patch().size(), -1);
+        layerY_[l] = scalarField(patch().size(), 0.0);
+    }
 
     label nShort = 0;
 
@@ -52,7 +59,17 @@ void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::calcSampling() const
         label celli = faceCells[i];
         label entryFace = patch().start() + i;
 
-        for (label layer = 2; layer <= sampleLayer_; layer++)
+        // Distance of a cell centre from the wall plane of face i
+        auto yWall = [&](const label c)
+        {
+            return max(-((C[c] - Cf[i]) & nf[i]), small);
+        };
+
+        layerCells_[0][i] = celli;
+        layerY_[0][i] = yWall(celli);
+        sampleCells_[i] = celli;
+
+        for (label layer = 2; layer <= nWalk(); layer++)
         {
             // The face of celli, other than the one we came through, whose
             // outward normal is closest to the inward wall normal
@@ -78,16 +95,25 @@ void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::calcSampling() const
 
             if (best < 0 || !mesh.isInternalFace(best))
             {
-                nShort++;
+                if (layer <= sampleLayer_)
+                {
+                    nShort++;
+                }
                 break;
             }
 
             celli = own[best] == celli ? nei[best] : own[best];
             entryFace = best;
+
+            layerCells_[layer - 1][i] = celli;
+            layerY_[layer - 1][i] = yWall(celli);
+            if (layer <= sampleLayer_)
+            {
+                sampleCells_[i] = celli;
+            }
         }
 
-        sampleCells_[i] = celli;
-        ySample_[i] = max(-((C[celli] - Cf[i]) & nf[i]), small);
+        ySample_[i] = yWall(sampleCells_[i]);
     }
 
     sampled_ = true;
@@ -145,7 +171,7 @@ Foam::nutSpaldingLESWallFunctionFvPatchScalarField::sampleVelocity() const
 Foam::tmp<Foam::vectorField>
 Foam::nutSpaldingLESWallFunctionFvPatchScalarField::inputVelocity() const
 {
-    if (Tf_ > 0 && Uf_.size() == patch().size())
+    if (filtered() && Uf_.size() == patch().size())
     {
         return tmp<vectorField>(new vectorField(Uf_));
     }
@@ -196,10 +222,12 @@ Foam::nutSpaldingLESWallFunctionFvPatchScalarField::nut() const
     const tmp<scalarField> tnuw = turbModel.nu(patchi);
     const scalarField& nuw = tnuw();
 
+    uTau_ = uTau();
+
     return max
     (
         scalar(0),
-        sqr(uTau())/(magGradU + rootVSmall) - nuw
+        sqr(uTau_)/(magGradU + rootVSmall) - nuw
     );
 }
 
@@ -211,8 +239,17 @@ void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::writeLocalEntries
 {
     nutWallFunctionFvPatchScalarField::writeLocalEntries(os);
     writeEntry(os, "sampleLayer", sampleLayer_);
-    writeEntry(os, "Tf", Tf_);
-    if (Tf_ > 0 && Uf_.size() == patch().size())
+    if (TfAuto_)
+    {
+        writeEntry(os, "Tf", word("auto"));
+        writeEntry(os, "TfCrossings", TfCrossings_);
+    }
+    else
+    {
+        writeEntry(os, "Tf", Tf_);
+    }
+    writeEntry(os, "nutFloor", nutFloor_);
+    if (filtered() && Uf_.size() == patch().size())
     {
         writeEntry(os, "Uf", Uf_);
     }
@@ -231,20 +268,57 @@ nutSpaldingLESWallFunctionFvPatchScalarField
 :
     nutWallFunctionFvPatchScalarField(p, iF, dict),
     sampleLayer_(dict.lookupOrDefault<label>("sampleLayer", 1)),
-    Tf_(dict.lookupOrDefault<scalar>("Tf", 0)),
+    Tf_(0),
+    TfAuto_(!dict.found("Tf")),
+    TfCrossings_(dict.lookupOrDefault<scalar>("TfCrossings", 4)),
+    nutFloor_(dict.lookupOrDefault<bool>("nutFloor", false)),
     Uf_(),
     filterTimeIndex_(-1),
     sampled_(false),
     sampleCells_(),
-    ySample_()
+    ySample_(),
+    layerCells_(),
+    layerY_(),
+    uTau_()
 {
+    if (dict.found("Tf"))
+    {
+        ITstream& is = dict.lookup("Tf");
+        const token t(is);
+        if (t.isWord())
+        {
+            if (t.wordToken() != "auto")
+            {
+                FatalIOErrorInFunction(dict)
+                    << "Tf " << t.wordToken() << ": a time scale or auto"
+                    << exit(FatalIOError);
+            }
+            TfAuto_ = true;
+        }
+        else if (t.isNumber())
+        {
+            Tf_ = t.number();
+        }
+        else
+        {
+            FatalIOErrorInFunction(dict)
+                << "Tf: a time scale or auto" << exit(FatalIOError);
+        }
+    }
+
+    if (TfCrossings_ <= 0)
+    {
+        FatalIOErrorInFunction(dict)
+            << "TfCrossings " << TfCrossings_ << " <= 0" << exit(FatalIOError);
+    }
+
     if (sampleLayer_ < 1)
     {
         FatalIOErrorInFunction(dict)
             << "sampleLayer " << sampleLayer_ << " < 1" << exit(FatalIOError);
     }
 
-    if (Tf_ > 0 && dict.found("Uf"))
+    if (filtered() && dict.found("Uf"))
     {
         Uf_ = vectorField("Uf", dict, p.size());
     }
@@ -263,11 +337,17 @@ nutSpaldingLESWallFunctionFvPatchScalarField
     nutWallFunctionFvPatchScalarField(ptf, p, iF, mapper),
     sampleLayer_(ptf.sampleLayer_),
     Tf_(ptf.Tf_),
+    TfAuto_(ptf.TfAuto_),
+    TfCrossings_(ptf.TfCrossings_),
+    nutFloor_(ptf.nutFloor_),
     Uf_(),
     filterTimeIndex_(-1),
     sampled_(false),
     sampleCells_(),
-    ySample_()
+    ySample_(),
+    layerCells_(),
+    layerY_(),
+    uTau_()
 {
     if (ptf.Uf_.size() == ptf.patch().size())
     {
@@ -287,11 +367,17 @@ nutSpaldingLESWallFunctionFvPatchScalarField
     nutWallFunctionFvPatchScalarField(wfpsf, iF),
     sampleLayer_(wfpsf.sampleLayer_),
     Tf_(wfpsf.Tf_),
+    TfAuto_(wfpsf.TfAuto_),
+    TfCrossings_(wfpsf.TfCrossings_),
+    nutFloor_(wfpsf.nutFloor_),
     Uf_(wfpsf.Uf_),
     filterTimeIndex_(wfpsf.filterTimeIndex_),
     sampled_(false),
     sampleCells_(),
-    ySample_()
+    ySample_(),
+    layerCells_(),
+    layerY_(),
+    uTau_()
 {}
 
 
@@ -310,6 +396,53 @@ Foam::nutSpaldingLESWallFunctionFvPatchScalarField::yPlus() const
     checkSampling();
 
     return y*uTau()/tnuw();
+}
+
+
+Foam::label Foam::nutSpaldingLESWallFunctionFvPatchScalarField::limitNut
+(
+    scalarField& nut
+) const
+{
+    checkSampling();
+
+    if (!nutFloor_ || uTau_.size() != patch().size())
+    {
+        return 0;
+    }
+
+    const momentumTransportModel& turbModel =
+        db().lookupType<momentumTransportModel>(internalField().group());
+    const tmp<scalarField> tnuw = turbModel.nu(patch().index());
+    const scalarField& nuw = tnuw();
+
+    label n = 0;
+    forAll(layerCells_, l)
+    {
+        const labelList& cells = layerCells_[l];
+        const scalarField& y = layerY_[l];
+
+        forAll(cells, i)
+        {
+            if (cells[i] < 0)
+            {
+                continue;
+            }
+
+            const scalar nutLaw = nuw[i]*wallLaw::spaldingNutByNu
+            (
+                y[i]*uTau_[i]/nuw[i], kappa_, E_
+            );
+
+            if (nutLaw > nut[cells[i]])
+            {
+                nut[cells[i]] = nutLaw;
+                n++;
+            }
+        }
+    }
+
+    return n;
 }
 
 
@@ -337,6 +470,9 @@ void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::map
     sampled_ = false;
     sampleCells_.clear();
     ySample_.clear();
+    layerCells_.clear();
+    layerY_.clear();
+    uTau_.clear();
 }
 
 
@@ -354,6 +490,9 @@ void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::reset
     sampled_ = false;
     sampleCells_.clear();
     ySample_.clear();
+    layerCells_.clear();
+    layerY_.clear();
+    uTau_.clear();
 }
 
 
@@ -366,17 +505,34 @@ void Foam::nutSpaldingLESWallFunctionFvPatchScalarField::updateCoeffs()
 
     // The filter advances once per time step, with the velocity at the first
     // evaluation of the step (the solution of the previous step)
-    if (Tf_ > 0 && db().time().timeIndex() != filterTimeIndex_)
+    if (filtered() && db().time().timeIndex() != filterTimeIndex_)
     {
         const vectorField Us(sampleVelocity());
+        const scalar deltaT = db().time().deltaTValue();
 
         if (Uf_.size() != patch().size())
         {
             Uf_ = Us;
         }
+        else if (TfAuto_)
+        {
+            // Tf = TfCrossings times the time the flow takes to cross the
+            // wall cell, per face
+            const scalarField& magSf = patch().magSf();
+            forAll(Uf_, i)
+            {
+                const scalar U = max(mag(Us[i]), mag(Uf_[i]));
+                const scalar eps = min
+                (
+                    deltaT*U/(TfCrossings_*sqrt(magSf[i]) + vSmall),
+                    scalar(1)
+                );
+                Uf_[i] = (1 - eps)*Uf_[i] + eps*Us[i];
+            }
+        }
         else
         {
-            const scalar eps = min(db().time().deltaTValue()/Tf_, scalar(1));
+            const scalar eps = min(deltaT/Tf_, scalar(1));
             Uf_ = (1 - eps)*Uf_ + eps*Us;
         }
 

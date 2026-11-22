@@ -74,6 +74,41 @@ int main()
         );
     }
 
+    Info<< "eddy viscosity of Spalding's law" << nl;
+    {
+        // Constant stress: (1 + nu_t/nu) dU+/dy+ = 1, by finite differences
+        scalar worst = 0;
+        for (scalar yp = 0.5; yp < 3000; yp *= 1.5)
+        {
+            const scalar h = 1e-4*yp;
+            const scalar dUdy =
+            (
+                wallLaw::spaldingUPlus(yp + h, kappa, E)
+              - wallLaw::spaldingUPlus(yp - h, kappa, E)
+            )/(2*h);
+            worst = max
+            (
+                worst,
+                mag((1 + wallLaw::spaldingNutByNu(yp, kappa, E))*dUdy - 1)
+            );
+        }
+        check(worst < 1e-6, "(1 + nu_t/nu) dU+/dy+ = 1");
+
+        const scalar yp = 3000;
+        check
+        (
+            mag(wallLaw::spaldingNutByNu(yp, kappa, E)/(kappa*yp) - 1) < 0.01,
+            "nu_t/nu -> kappa y+ in the log layer"
+        );
+
+        const scalar order = Foam::log
+        (
+            wallLaw::spaldingNutByNu(0.2, kappa, E)
+           /wallLaw::spaldingNutByNu(0.1, kappa, E)
+        )/Foam::log(scalar(2));
+        check(order > 2.9 && order < 3.1, "nu_t/nu ~ y+^3 at the wall");
+    }
+
     Info<< "friction velocity from a sample at y+ = 0.5 .. 3000" << nl;
     {
         const scalar nu = 1.5e-5, uTau = 0.3;
