@@ -3,10 +3,10 @@
 # Re_tau ~ 2000 (Dean's correlation), built from OpenFOAM-14's channel395
 # tutorial: the same box (4 x 2 x 2, h = 1) on a coarse uniform grid of
 # 40 x 30 x 30 cells (wall cell centre at y+ ~ 67, dx+ ~ 200, dz+ ~ 133),
-# nu lowered to 3.07e-6, WALE, and the wall model fed with the velocity of the
-# second cell layer, filtered in time (Tf = 4 s, about 4 times the time the
-# flow takes to cross a wall cell). The upstream developed Re_tau 395
-# field is mapped as the initial condition.
+# nu lowered to 3.07e-6, WALE, and the wall model with its defaults: the
+# velocity of the wall cell, filtered in time with Tf auto (4 times the time
+# the flow takes to cross a wall cell, per face). The upstream developed
+# Re_tau 395 field is mapped as the initial condition.
 #
 # Usage: ./Allrun [time steps, default 300]   short run on 2 processors split
 #                                             across the channel height (each
@@ -46,7 +46,7 @@ foamDictionary -entry nu -set 3.07e-06 constant/physicalProperties > /dev/null
 for wall in bottomWall topWall
 do
     foamDictionary -entry boundaryField/$wall -set \
-        '{ type nutSpaldingLESWallFunction; sampleLayer 2; Tf 4; value uniform 0; }' \
+        '{ type nutSpaldingLESWallFunction; value uniform 0; }' \
         0/nut > /dev/null
 done
 
@@ -72,8 +72,8 @@ fi
 
 grep -q "^End" log.foamRun || fail "the run did not finish (see case/log.foamRun)"
 
-# The sampling report of both walls: second layer, no walk stopped early
-n=$(grep -c "nutSpaldingLESWallFunction .*Wall: sample layer 2,.* stopped early on 0 of 1200 faces" \
+# The sampling report of both walls: wall cell, no walk stopped early
+n=$(grep -c "nutSpaldingLESWallFunction .*Wall: sample layer 1,.* stopped early on 0 of 1200 faces" \
     log.foamRun)
 [ "$n" -ge 2 ] || fail "no sampling report of nutSpaldingLESWallFunction on both walls"
 

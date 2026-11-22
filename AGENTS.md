@@ -31,8 +31,9 @@ GPL-3.0-or-later. Everything here links OpenFOAM and is GPL.
     - `*NonEquilibriumSpaldingWallFunction` y+-insensitive (Spalding's law with the same
       pressure-gradient correction); epsilon models add `twoLayerEpsilon` for cells inside y+ ~ 30
     - `nutSpaldingLESWallFunction` wall-stress model for wall-modelled LES: Spalding's law fed
-      with a velocity sampled `sampleLayer` cells from the wall and / or filtered in time (`Tf`),
-      the remedies for the log-layer mismatch; the filtered velocity is written with the field
+      with a velocity sampled `sampleLayer` cells from the wall and / or filtered in time (`Tf`,
+      default `auto`), the remedies for the log-layer mismatch; the filtered velocity is written
+      with the field. Its optional `nutFloor` acts through the `wallModelledNut` fvConstraint
     The epsilon / omega classes derive from copies of OpenFOAM's epsilon / omegaWallFunction with
     `calculate` made virtual; the Spalding ones override only `calculate`. All walls of a case use
     one family (OpenFOAM handles the wall cells of all wall-function patches from one master patch).

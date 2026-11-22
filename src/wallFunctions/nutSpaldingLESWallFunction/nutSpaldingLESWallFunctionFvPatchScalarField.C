@@ -269,7 +269,7 @@ nutSpaldingLESWallFunctionFvPatchScalarField
     nutWallFunctionFvPatchScalarField(p, iF, dict),
     sampleLayer_(dict.lookupOrDefault<label>("sampleLayer", 1)),
     Tf_(0),
-    TfAuto_(false),
+    TfAuto_(!dict.found("Tf")),
     TfCrossings_(dict.lookupOrDefault<scalar>("TfCrossings", 4)),
     nutFloor_(dict.lookupOrDefault<bool>("nutFloor", false)),
     Uf_(),
