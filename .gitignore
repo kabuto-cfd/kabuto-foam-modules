@@ -22,3 +22,7 @@ tutorials/**/log.*
 tutorials/**/postProcessing/
 tutorials/**/cases/
 tutorials/**/results.txt
+
+# Python
+__pycache__/
+*.pyc
