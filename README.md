@@ -2,7 +2,7 @@
 
 Add-on modules for [OpenFOAM-14](https://openfoam.org) (OpenFOAM Foundation release) by Kabuto CFD.
 Every module builds with `wmake` against an unmodified OpenFOAM-14 and is loaded at run time
-through `libs (...)`; nothing in OpenFOAM itself is changed.
+through `libs (...)` (a solver module by `solver <name>;`); nothing in OpenFOAM itself is changed.
 
 ## Modules
 
@@ -16,8 +16,7 @@ through `libs (...)`; nothing in OpenFOAM itself is changed.
 | [`sigma`](src/momentumTransportModels/LES/sigma/sigma.H) | `libkabutoMomentumTransportModels.so` | Nicoud et al.'s σ subgrid-scale model (2011): eddy viscosity from the singular values of the velocity gradient; zero in pure shear and, unlike WALE, in solid-body rotation (vortex cores, swirl); y³ at walls without damping; incompressible and compressible |
 | [`nutSpaldingLESWallFunction`](src/wallFunctions/nutSpaldingLESWallFunction/nutSpaldingLESWallFunctionFvPatchScalarField.H) | `libkabutoWallFunctions.so` | Wall-stress model for wall-modelled LES: Spalding's law fed with the velocity of a cell layer away from the wall and / or filtered in time, the remedies for the log-layer mismatch (default: wall cell, filtered in time with an automatic time scale) |
 | [`wallModelledNut`](src/wallFunctions/wallModelledNut/wallModelledNut.H) | `libkabutoWallFunctions.so` | fvConstraint: optional floor of the eddy viscosity in the wall-modelled layer at the viscosity of Spalding's law (`nutFloor yes` of `nutSpaldingLESWallFunction`) |
-
-Planned: solver modules for `foamRun`.
+| [`diffusionExchange`](src/solverModules/diffusionExchange/diffusionExchange.H) | `libdiffusionExchangeSolver.so` | Solver module for `foamRun`: diffusion of a scalar with a diffusivity field (cells with D = 0 are closed) and a linear exchange with a time-dependent reservoir; for transport through porous or fibrous media whose cell properties come from a sub-grid model such as a pore network |
 
 ### realizableR
 
@@ -300,6 +299,55 @@ Kalitzin (2005), Phys. Fluids 17, 105101. Krank, Kronbichler & Wall (2018), Flow
 101, 521. Hoekstra (2000), Gas flow field and collection efficiency of cyclone separators, PhD
 thesis, TU Delft.
 
+### diffusionExchange
+
+A solver module for `foamRun` (`solver diffusionExchange;` in `system/controlDict`, no `libs`
+entry: `foamRun` loads `libdiffusionExchangeSolver.so` by that name). It solves
+
+```
+ddt(C) - div(D grad(C)) = kExchange (Cref(t) - C) + fvModels
+```
+
+for a scalar `C` in a medium whose diffusivity `D` and exchange rate `kExchange` are fields
+(`0/D`, `0/kExchange`; without a field file the uniform value of `constant/physicalProperties`
+is used). `Cref` is a `Function1` of time, the value of a reservoir the medium exchanges with:
+a network of channels or vessels the mesh does not resolve, for instance. The intended use is
+transport through porous or fibrous media where each cell gets its properties from a sub-grid
+model, such as a pore-network model that gives the effective diffusivity of particles of a
+given size and returns zero where they cannot pass.
+
+Cells with `D = 0` are closed. With the harmonic scheme
+
+```
+laplacianSchemes { laplacian(D,C) Gauss harmonic corrected; }
+```
+
+a face is closed as soon as one of its two cells is, and a jump of `D` between two cells is
+two resistances in series (the linear scheme would let a closed cell leak). For that scheme
+the module floors `D` at `Dmin` (default 1e-30 m²/s) and reports the number of closed cells.
+
+`constant/physicalProperties`:
+
+```
+Cref
+{
+    type    table;                 // any Function1 of time
+    values  ((0 1) (21600 0.5) (43200 0.25) (86400 0.0625));
+}
+// D          1e-10;    uniform diffusivity [m^2/s], only without a field 0/D
+// kExchange  0;        uniform exchange rate [1/s], only without a field 0/kExchange
+// Dmin       1e-30;    floor of the diffusivity [m^2/s]
+// field      C;        name of the solved field
+```
+
+`tutorials/diffusionExchange/slab/Allrun` checks three exact solutions in a 1-D slab:
+
+| case | exact | computed |
+|---|---|---|
+| two layers, D = 1e-10 and 1e-11 m²/s, steady: values next to the interface | 0.91000, 0.90000 | 0.91000, 0.90000 (max error 5e-11) |
+| right half closed (D = 0), 20000 s: maximum in the closed half | 0 | 4e-16 |
+| exchange only, kExchange = 1e-3 1/s, Cref = 1, 1000 s (Δt = 1 s, Euler) | 0.63212 | 0.63194 (−0.03 %) |
+
 ## Build
 
 ```bash
@@ -333,6 +381,8 @@ The libraries go to `$FOAM_USER_LIBBIN`, which OpenFOAM searches when a case nam
   a y⁺-insensitive treatment is more than 6 % off; `tutorials/wallFunctions/pitzDailySteady/Allrun
   [std|ne|nes|nes2l]` runs the backward-facing step and fails when it does not reattach between
   5 and 9 step heights.
+- `tutorials/diffusionExchange/slab/Allrun` runs the `diffusionExchange` solver module on three
+  1-D cases and fails when a result is off its exact solution.
 
 GitHub Actions builds every module against the openfoam.org OpenFOAM-14 package on
 Ubuntu 24.04 and runs all of these for every change.
