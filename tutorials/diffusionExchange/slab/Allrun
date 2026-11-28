@@ -1,0 +1,27 @@
+#!/bin/sh
+# diffusionExchange solver module against three exact solutions in a 1-D slab
+# (see makeCase.py): two layers of different diffusivity in series (harmonic
+# interpolation to the faces), a closed half (D = 0 stays empty) and the
+# exchange with a reservoir (C = 1 - exp(-kExchange t)). Fails if any is off.
+cd "${0%/*}" || exit 1
+
+rm -rf cases results.txt
+mkdir cases
+status=0
+for kind in twoLayer closed exchange
+do
+    d=cases/$kind
+    python3 makeCase.py "$d" "$kind"
+    (cd "$d" && blockMesh > log.blockMesh 2>&1 && foamRun > log.foamRun 2>&1) || {
+        echo "Allrun: $kind did not run (see $d/log.foamRun)" 1>&2
+        status=1
+        continue
+    }
+    grep -q "Selecting solver diffusionExchange" "$d/log.foamRun" || {
+        echo "Allrun: diffusionExchange was not selected in $kind" 1>&2
+        status=1
+    }
+    python3 check.py "$d" "$kind" >> results.txt || { echo "Allrun: $kind is off" 1>&2; status=1; }
+    tail -1 results.txt
+done
+exit $status

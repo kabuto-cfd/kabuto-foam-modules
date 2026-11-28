@@ -18,6 +18,7 @@ cd "${0%/*}" || exit 1
 wmake $targetType src/fvConstraints
 wmake $targetType src/momentumTransportModels
 wmake $targetType src/wallFunctions
+wmake $targetType src/solverModules/diffusionExchange
 
 # Tests (not installed anywhere but $FOAM_USER_APPBIN)
 wmake test/realizableR

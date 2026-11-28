@@ -37,6 +37,12 @@ GPL-3.0-or-later. Everything here links OpenFOAM and is GPL.
     The epsilon / omega classes derive from copies of OpenFOAM's epsilon / omegaWallFunction with
     `calculate` made virtual; the Spalding ones override only `calculate`. All walls of a case use
     one family (OpenFOAM handles the wall cells of all wall-function patches from one master patch).
+  - `src/solverModules/<name>/` one library per solver module for `foamRun`, named
+    `lib<name>Solver` (not `libkabuto...`): `foamRun` loads a solver module by that name
+    (`solver <name>;`), so cases need no `libs` entry. One `wmake` line each in `Allwmake`.
+    - `diffusionExchange` scalar diffusion with a diffusivity field (D = 0 closes a cell,
+      harmonic interpolation) and a linear exchange with a time-dependent reservoir; exact
+      solutions in `tutorials/diffusionExchange/slab`
 - `test/<module>/` small `Test-<module>` applications that check the numerics without a case;
   exit status 1 on failure. Built by `Allwmake`, run by CI.
 - `tutorials/<module>/<case>/Allrun` a short run that shows the module working. Prefer copying an
@@ -59,6 +65,7 @@ set +e; source /opt/openfoam14/etc/bashrc; set -e
 tutorials/stressOmega/ductSecondaryFlow/Allrun 300 && tutorials/stressOmega/channel395/Allrun
 Test-wallLaw && tutorials/wallFunctions/channelYPlus/Allrun && tutorials/wallFunctions/pitzDailySteady/Allrun nes2l
 Test-sigma && tutorials/sigma/channel395/Allrun && tutorials/wallFunctions/channelWMLES/Allrun
+tutorials/diffusionExchange/slab/Allrun
 ```
 
 ## Code conventions
