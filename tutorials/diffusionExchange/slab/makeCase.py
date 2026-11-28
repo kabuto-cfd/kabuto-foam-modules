@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Write one of the three 1-D checks of the diffusionExchange solver module.
+"""Write one of the five 1-D checks of the diffusionExchange solver module.
 
-    makeCase.py <directory> twoLayer | closed | exchange
+    makeCase.py <directory> twoLayer | closed | exchange | convection | source
 
 A slab of length 1 mm in x, 100 cells, C = 1 at x = 0 unless stated.
   twoLayer  D = 1e-10 in the left half, 1e-11 in the right half, C = 0 at
@@ -11,6 +11,11 @@ A slab of length 1 mm in x, 100 cells, C = 1 at x = 0 unless stated.
             x = L, 20000 s: the left half fills, the right half stays empty
   exchange  uniform D, kExchange = 1e-3 1/s, Cref = 1, zero gradient at both
             ends, 1000 s: C = 1 - exp(-kExchange t) everywhere
+  convection  uniform D = 1e-10 and a frozen flux phi of speed 5e-7 m/s towards
+            +x (Peclet number 5), C = 0 at x = L, steady state:
+            C = 1 - (exp(Pe x/L) - 1)/(exp(Pe) - 1)
+  source    uniform D, source = 1e-3 1/s, zero gradient at both ends, 1000 s:
+            C = source t = 1 everywhere
 Pure Python, no third-party modules.
 """
 import os
@@ -63,6 +68,21 @@ elif kind == "exchange":
     end, dt = 1000, 1
     props = "Cref            1;\nD               1e-10;\nkExchange       1e-3;\n"
     field("C", "[0 0 0 0 0 0 0]", "uniform 0", zg, zg)
+elif kind == "convection":
+    ddt, end, dt = "steadyState", 1, 1
+    props = "Cref            0;\nD               1e-10;\n"
+    field("C", "[0 0 0 0 0 0 0]", "uniform 0", fixed % 1, fixed % 0)
+    flux = 5e-7 * 1e-4 * 1e-4                      # speed x face area
+    write(os.path.join(case, "0", "phi"), "surfaceScalarField",
+          "dimensions      [0 3 -1 0 0 0 0];\n\ninternalField   uniform %g;\n\nboundaryField\n{\n"
+          "    left\n    {\n        type            calculated;\n        value           uniform %g;\n    }\n"
+          "    right\n    {\n        type            calculated;\n        value           uniform %g;\n    }\n"
+          "    sides\n    {\n        type            empty;\n        value           nonuniform List<scalar> 0();\n    }\n}\n"
+          % (flux, -flux, flux))
+elif kind == "source":
+    end, dt = 1000, 1
+    props = "Cref            0;\nD               1e-10;\nsource          1e-3;\n"
+    field("C", "[0 0 0 0 0 0 0]", "uniform 0", zg, zg)
 else:
     sys.exit("makeCase.py: unknown case " + kind)
 
@@ -74,10 +94,11 @@ write(os.path.join(case, "system", "controlDict"), "dictionary",
       "writePrecision  10;\ntimeFormat      general;\nrunTimeModifiable no;\n" % (end, dt, end))
 write(os.path.join(case, "system", "fvSchemes"), "dictionary",
       "ddtSchemes\n{\n    default         %s;\n}\n\ngradSchemes\n{\n    default         Gauss linear;\n}\n\n"
-      "divSchemes\n{\n    default         none;\n}\n\n"
+      "divSchemes\n{\n    default         none;\n    div(phi,C)      Gauss linear;\n}\n\n"
       "laplacianSchemes\n{\n    default         none;\n    laplacian(D,C)  Gauss harmonic corrected;\n}\n\n"
       "interpolationSchemes\n{\n    default         linear;\n}\n\nsnGradSchemes\n{\n    default         corrected;\n}\n" % ddt)
 write(os.path.join(case, "system", "fvSolution"), "dictionary",
-      "solvers\n{\n    \"C.*\"\n    {\n        solver          PCG;\n        preconditioner  DIC;\n"
+      "solvers\n{\n    \"C.*\"\n    {\n        solver          %s;\n        preconditioner  %s;\n"
       "        tolerance       1e-14;\n        relTol          0;\n    }\n}\n\n"
-      "PIMPLE\n{\n    nNonOrthogonalCorrectors 0;\n}\n")
+      "PIMPLE\n{\n    nNonOrthogonalCorrectors 0;\n}\n"
+      % (("PBiCGStab", "DILU") if kind == "convection" else ("PCG", "DIC")))

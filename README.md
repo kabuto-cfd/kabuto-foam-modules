@@ -16,7 +16,7 @@ through `libs (...)` (a solver module by `solver <name>;`); nothing in OpenFOAM 
 | [`sigma`](src/momentumTransportModels/LES/sigma/sigma.H) | `libkabutoMomentumTransportModels.so` | Nicoud et al.'s σ subgrid-scale model (2011): eddy viscosity from the singular values of the velocity gradient; zero in pure shear and, unlike WALE, in solid-body rotation (vortex cores, swirl); y³ at walls without damping; incompressible and compressible |
 | [`nutSpaldingLESWallFunction`](src/wallFunctions/nutSpaldingLESWallFunction/nutSpaldingLESWallFunctionFvPatchScalarField.H) | `libkabutoWallFunctions.so` | Wall-stress model for wall-modelled LES: Spalding's law fed with the velocity of a cell layer away from the wall and / or filtered in time, the remedies for the log-layer mismatch (default: wall cell, filtered in time with an automatic time scale) |
 | [`wallModelledNut`](src/wallFunctions/wallModelledNut/wallModelledNut.H) | `libkabutoWallFunctions.so` | fvConstraint: optional floor of the eddy viscosity in the wall-modelled layer at the viscosity of Spalding's law (`nutFloor yes` of `nutSpaldingLESWallFunction`) |
-| [`diffusionExchange`](src/solverModules/diffusionExchange/diffusionExchange.H) | `libdiffusionExchangeSolver.so` | Solver module for `foamRun`: diffusion of a scalar with a diffusivity field (cells with D = 0 are closed) and a linear exchange with a time-dependent reservoir; for transport through porous or fibrous media whose cell properties come from a sub-grid model such as a pore network |
+| [`diffusionExchange`](src/solverModules/diffusionExchange/diffusionExchange.H) | `libdiffusionExchangeSolver.so` | Solver module for `foamRun`: diffusion of a scalar with a diffusivity field (cells with D = 0 are closed), a linear exchange with a time-dependent reservoir and, optionally, convection by a frozen flux and a source field; for transport through porous or fibrous media whose cell properties come from a sub-grid model such as a pore network |
 
 ### realizableR
 
@@ -305,7 +305,7 @@ A solver module for `foamRun` (`solver diffusionExchange;` in `system/controlDic
 entry: `foamRun` loads `libdiffusionExchangeSolver.so` by that name). It solves
 
 ```
-ddt(C) - div(D grad(C)) = kExchange (Cref(t) - C) + fvModels
+ddt(C) + div(phi C) - div(D grad(C)) = kExchange (Cref(t) - C) + source + fvModels
 ```
 
 for a scalar `C` in a medium whose diffusivity `D` and exchange rate `kExchange` are fields
@@ -315,6 +315,13 @@ a network of channels or vessels the mesh does not resolve, for instance. The in
 transport through porous or fibrous media where each cell gets its properties from a sub-grid
 model, such as a pore-network model that gives the effective diffusivity of particles of a
 given size and returns zero where they cannot pass.
+
+The convection term is there only when a face flux `0/phi` is found: a flow computed
+beforehand and kept frozen (it must be conservative), for example in a vessel the mesh
+resolves, with `phi = 0` in the medium around it; `divSchemes` then needs `div(phi,C)`.
+`source` [C/s] is a field `0/source` or a uniform value, default 0. With `C` a temperature,
+`D = k/(ρc)`, `kExchange = w_b c_b/(ρc)`, `Cref` the arterial temperature and
+`source = Q/(ρc)`, the equation is Pennes' bioheat equation for a medium of uniform `ρc`.
 
 Cells with `D = 0` are closed. With the harmonic scheme
 
@@ -336,17 +343,20 @@ Cref
 }
 // D          1e-10;    uniform diffusivity [m^2/s], only without a field 0/D
 // kExchange  0;        uniform exchange rate [1/s], only without a field 0/kExchange
+// source     0;        uniform source [C/s], only without a field 0/source
 // Dmin       1e-30;    floor of the diffusivity [m^2/s]
 // field      C;        name of the solved field
 ```
 
-`tutorials/diffusionExchange/slab/Allrun` checks three exact solutions in a 1-D slab:
+`tutorials/diffusionExchange/slab/Allrun` checks five exact solutions in a 1-D slab:
 
 | case | exact | computed |
 |---|---|---|
 | two layers, D = 1e-10 and 1e-11 m²/s, steady: values next to the interface | 0.91000, 0.90000 | 0.91000, 0.90000 (max error 5e-11) |
 | right half closed (D = 0), 20000 s: maximum in the closed half | 0 | 4e-16 |
 | exchange only, kExchange = 1e-3 1/s, Cref = 1, 1000 s (Δt = 1 s, Euler) | 0.63212 | 0.63194 (−0.03 %) |
+| convection against diffusion, frozen flux, Péclet number 5, steady: value at mid length | 0.92205 | 0.92211 (max error 3e-4) |
+| source only, 1e-3 1/s, 1000 s | 1 | 1.000000 |
 
 `tutorials/diffusionExchange/tumourNodule/Allrun` is an illustration of the intended use:
 nanoparticles supplied from the blood to a tumour nodule (radius 3 mm) in liver tissue over
@@ -403,7 +413,7 @@ The libraries go to `$FOAM_USER_LIBBIN`, which OpenFOAM searches when a case nam
   a y⁺-insensitive treatment is more than 6 % off; `tutorials/wallFunctions/pitzDailySteady/Allrun
   [std|ne|nes|nes2l]` runs the backward-facing step and fails when it does not reattach between
   5 and 9 step heights.
-- `tutorials/diffusionExchange/slab/Allrun` runs the `diffusionExchange` solver module on three
+- `tutorials/diffusionExchange/slab/Allrun` runs the `diffusionExchange` solver module on five
   1-D cases and fails when a result is off its exact solution;
   `tutorials/diffusionExchange/tumourNodule/Allrun` runs the illustrative nodule case and fails
   when it is more than 3 % off an independent explicit scheme or a closed cell leaks.

@@ -29,7 +29,19 @@ Description
     diffusivity varies from cell to cell, with a linear exchange between the
     medium and a reservoir of prescribed, time-dependent value:
 
-        ddt(C) - div(D grad(C)) = kExchange (Cref(t) - C) + fvModels
+        ddt(C) + div(phi C) - div(D grad(C))
+      = kExchange (Cref(t) - C) + source + fvModels
+
+    The convection term is there only when a face flux field phi is found in
+    the start time directory (a flow computed beforehand and kept frozen, for
+    example the blood in a vessel that the mesh resolves, phi = 0 in the
+    medium around it); the field source [C/s] likewise (a distributed
+    heating or release rate), default 0.
+
+    With C a temperature, D the thermal diffusivity k/(rho c), kExchange the
+    perfusion term w_b c_b/(rho c), Cref the arterial temperature and source
+    the heating rate Q/(rho c), this is Pennes' bioheat equation for a medium
+    of uniform rho c, with the convection in the resolved vessels added.
 
     Typical use: transport of a solute or of particles through a porous or
     fibrous medium fed from a network that the mesh does not resolve (the
@@ -37,7 +49,7 @@ Description
     sub-grid model such as a pore-network model and is zero in the cells the
     particles cannot cross.
 
-    D and kExchange are read as fields from the start time directory; where a
+    D, kExchange and source are read as fields from the start time directory; where a
     field file is absent the uniform value of constant/physicalProperties is
     used. Cells with D = 0 are impermeable when D is interpolated to the faces
     with the harmonic scheme (a face is closed as soon as one of its two cells
@@ -65,6 +77,7 @@ Usage
         Cref      | Function1 of time, value of the reservoir    | yes   |
         D         | uniform diffusivity [m^2/s], if no field D   | if no field |
         kExchange | uniform exchange rate [1/s], if no field     | no    | 0
+        source    | uniform source [C/s], if no field            | no    | 0
         Dmin      | floor of the diffusivity [m^2/s]             | no    | 1e-30
         field     | name of the solved field                     | no    | C
     \endtable
@@ -78,6 +91,9 @@ Usage
     }
     \endverbatim
 
+    With phi, system/fvSchemes needs divSchemes { div(phi,C) ...; } and phi
+    must be conservative (div(phi) = 0) for C to be conserved.
+
     Optional maxDeltaT in system/controlDict limits an adjustable time step.
 
 SourceFiles
@@ -90,6 +106,7 @@ SourceFiles
 
 #include "solver.H"
 #include "volFields.H"
+#include "surfaceFields.H"
 #include "Function1.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -128,6 +145,12 @@ protected:
 
         //- Exchange rate with the reservoir [1/s]
         volScalarField kExchange_;
+
+        //- Source [C/s]
+        volScalarField source_;
+
+        //- Frozen face flux [m^3/s], if the field phi was found
+        autoPtr<surfaceScalarField> phi_;
 
         //- Value of the reservoir as a function of time
         autoPtr<Function1<scalar>> Cref_;

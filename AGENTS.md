@@ -41,7 +41,8 @@ GPL-3.0-or-later. Everything here links OpenFOAM and is GPL.
     `lib<name>Solver` (not `libkabuto...`): `foamRun` loads a solver module by that name
     (`solver <name>;`), so cases need no `libs` entry. One `wmake` line each in `Allwmake`.
     - `diffusionExchange` scalar diffusion with a diffusivity field (D = 0 closes a cell,
-      harmonic interpolation) and a linear exchange with a time-dependent reservoir; exact
+      harmonic interpolation), a linear exchange with a time-dependent reservoir, optional
+      convection by a frozen flux `phi` and a `source` field (Pennes' bioheat equation); exact
       solutions in `tutorials/diffusionExchange/slab`; `tumourNodule` is an illustration with
       assumed tissue properties (say so wherever it is described: not a validated model)
 - `test/<module>/` small `Test-<module>` applications that check the numerics without a case;
