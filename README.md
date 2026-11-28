@@ -275,11 +275,30 @@ function), so its numbers rank the settings, not the model's accuracy. Differenc
 the channel are within the scatter of a run of this length. `tutorials/wallFunctions/channelWMLES/Allrun -full`
 reruns the default / WALE case and fails when Re_τ is more than 3 % off (−2.1 % above).
 
+Resolve the boundary layer before moving the sample. In a swirling flow (the gas cyclone of
+Hoekstra 2000, D = 0.29 m, inlet 16.1 m/s, σ, default settings) the swirl boundary layer on the
+body wall is δ ≈ 10 mm. With wall faces of 3.5 mm and 3 prism layers reaching 6 mm, the mean
+velocity at 0.4–0.9 δ lay 11–18 % above the log law (with each run's own uτ). Wall faces of
+1.7 mm and 5 prism layers (cells of 1.5–1.7 mm up to 10 mm) brought that to 1–13 % and raised
+uτ by 4–6 %, at 1.9 times the cells. What remains is one step between the wall cell and the
+next (first layer 1 mm in both meshes), with the wall cell itself on Spalding's law within
+0–3 %:
+
+| case | ν_t/ν at the face between cells 1 and 2 | κ y⁺ there | dU⁺/d ln y⁺ across it (log law 2.44) |
+|---|---|---|---|
+| channel above, WALE / σ | 3 / 6 | 53 | 3.4 / 3.7 |
+| cyclone, WALE | 0.2–0.6 | 22–33 | 6.6–8.1 |
+| cyclone, σ (both meshes) | 1.6–4.2 | 23–34 | 5.1–7.0 |
+
+The subgrid viscosity next to the wall is a small fraction of the law's in both flows; the
+resolved eddies close the gap in the channel, much less so in the cyclone.
+
 References: Kawai & Larsson (2012), Phys. Fluids 24, 015105. Yang, Park & Moin (2017), Phys. Rev.
 Fluids 2, 104601. Spalding (1961), J. Appl. Mech. 28, 455. Schumann (1975), J. Comput. Phys. 18,
 376. Sullivan, McWilliams & Moeng (1994), Boundary-Layer Meteorol. 71, 247. Templeton, Medic &
 Kalitzin (2005), Phys. Fluids 17, 105101. Krank, Kronbichler & Wall (2018), Flow Turbul. Combust.
-101, 521.
+101, 521. Hoekstra (2000), Gas flow field and collection efficiency of cyclone separators, PhD
+thesis, TU Delft.
 
 ## Build
 
