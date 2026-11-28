@@ -1,14 +1,16 @@
 #!/bin/sh
-# diffusionExchange solver module against three exact solutions in a 1-D slab
+# diffusionExchange solver module against five exact solutions in a 1-D slab
 # (see makeCase.py): two layers of different diffusivity in series (harmonic
-# interpolation to the faces), a closed half (D = 0 stays empty) and the
-# exchange with a reservoir (C = 1 - exp(-kExchange t)). Fails if any is off.
+# interpolation to the faces), a closed half (D = 0 stays empty), the
+# exchange with a reservoir (C = 1 - exp(-kExchange t)), convection by a
+# frozen flux against diffusion (Peclet number 5) and a uniform source.
+# Fails if any is off.
 cd "${0%/*}" || exit 1
 
 rm -rf cases results.txt
 mkdir cases
 status=0
-for kind in twoLayer closed exchange
+for kind in twoLayer closed exchange convection source
 do
     d=cases/$kind
     python3 makeCase.py "$d" "$kind"

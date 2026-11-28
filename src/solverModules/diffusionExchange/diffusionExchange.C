@@ -29,6 +29,7 @@ License
 #include "fvmSup.H"
 #include "fvModels.H"
 #include "fvConstraints.H"
+#include "fvmDiv.H"
 #include "addToRunTimeSelectionTable.H"
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
@@ -162,6 +163,19 @@ Foam::solvers::diffusionExchange::diffusionExchange(fvMesh& mesh)
         readOrUniform("kExchange", dimless/dimTime, false)
     ),
 
+    source_
+    (
+        IOobject
+        (
+            "source",
+            runTime.name(),
+            mesh,
+            IOobject::NO_READ,
+            IOobject::NO_WRITE
+        ),
+        readOrUniform("source", C_.dimensions()/dimTime, false)
+    ),
+    phi_(nullptr),
     Cref_
     (
         Function1<scalar>::New
@@ -183,6 +197,26 @@ Foam::solvers::diffusionExchange::diffusionExchange(fvMesh& mesh)
             << type()
             << " solver does not support LTS, use 'steadyState' ddtScheme"
             << exit(FatalError);
+    }
+
+    // Frozen flux of a flow computed beforehand, if there is one
+    typeIOobject<surfaceScalarField> phiIO
+    (
+        "phi",
+        runTime.name(),
+        mesh,
+        IOobject::MUST_READ,
+        IOobject::NO_WRITE
+    );
+
+    if (phiIO.headerOk())
+    {
+        Info<< "Reading the frozen flux phi" << endl;
+        phi_.set(new surfaceScalarField(phiIO, mesh));
+    }
+    else
+    {
+        Info<< "No field phi: no convection" << endl;
     }
 
     // Floor of the diffusivity, for the harmonic interpolation to the faces
@@ -281,8 +315,14 @@ void Foam::solvers::diffusionExchange::thermophysicalPredictor()
           + fvm::Sp(kExchange_, C_)
          ==
             kExchange_*Cref
+          + source_
           + fvModels().source(C_)
         );
+
+        if (phi_.valid())
+        {
+            CEqn += fvm::div(phi_(), C_);
+        }
 
         CEqn.relax();
 
