@@ -348,6 +348,28 @@ Cref
 | right half closed (D = 0), 20000 s: maximum in the closed half | 0 | 4e-16 |
 | exchange only, kExchange = 1e-3 1/s, Cref = 1, 1000 s (Δt = 1 s, Euler) | 0.63212 | 0.63194 (−0.03 %) |
 
+`tutorials/diffusionExchange/tumourNodule/Allrun` is an illustration of the intended use:
+nanoparticles supplied from the blood to a tumour nodule (radius 3 mm) in liver tissue over
+24 h after one dose. `nodule.py` gives every cell its diffusivity from a pore-network lookup
+(`poreNetworkLookup.csv`: relative diffusivity of hard spheres against particle radius / mean
+throat radius, zero above the percolation threshold at 1.925) and its exchange rate from the
+vessel wall and the distance between capillaries. Interstitial concentration at 24 h, relative
+to the plasma concentration at the start (`nodule.py make <dir> <radius in nm>`):
+
+| particle radius | rim of the nodule | core (no vessels) | liver tissue | closed cells |
+|---|---|---|---|---|
+| 5 nm | 0.115 | 0.198 | 0.071 | 0 |
+| 20 nm | 0.157 | 0.088 | 0.081 | 0 |
+| 50 nm | 0.112 | 0.00002 | 0.099 | 117 of 32768 |
+
+`Allrun` (50 nm) fails when a region average is more than 3 % off an explicit scheme written
+in Python without the module (nodule −0.05 %, rim −0.08 %, tissue +2.0 %), or when a closed
+cell leaks. **The tissue is assumed throughout** (throat radii, capillary spacing, wall
+permeability), interstitial flow, uptake by cells and clearance are left out, and the lookup
+has been compared with diffusion measurements in agarose gel only (Fatin-Rouge, Starchev &
+Buffle, *Biophys. J.* 86, 2004), not with tissue: a demonstration of the solver, not a
+validated model, and not for any clinical use.
+
 ## Build
 
 ```bash
@@ -382,7 +404,9 @@ The libraries go to `$FOAM_USER_LIBBIN`, which OpenFOAM searches when a case nam
   [std|ne|nes|nes2l]` runs the backward-facing step and fails when it does not reattach between
   5 and 9 step heights.
 - `tutorials/diffusionExchange/slab/Allrun` runs the `diffusionExchange` solver module on three
-  1-D cases and fails when a result is off its exact solution.
+  1-D cases and fails when a result is off its exact solution;
+  `tutorials/diffusionExchange/tumourNodule/Allrun` runs the illustrative nodule case and fails
+  when it is more than 3 % off an independent explicit scheme or a closed cell leaks.
 
 GitHub Actions builds every module against the openfoam.org OpenFOAM-14 package on
 Ubuntu 24.04 and runs all of these for every change.

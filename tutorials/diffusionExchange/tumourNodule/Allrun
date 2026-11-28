@@ -1,0 +1,19 @@
+#!/bin/sh
+# diffusionExchange on an illustrative case: nanoparticles of radius 50 nm
+# supplied from the blood to a tumour nodule in liver tissue over 24 h, with
+# the diffusivity of every cell from a pore-network lookup (nodule.py; all
+# tissue properties are assumed). Fails if the region averages are more than
+# 3 % off an explicit scheme written in Python, or if a closed cell leaks.
+cd "${0%/*}" || exit 1
+
+rm -rf case
+python3 nodule.py make case 50 || exit 1
+(cd case && blockMesh > log.blockMesh 2>&1 && foamRun > log.foamRun 2>&1) || {
+    echo "Allrun: the case did not run (see case/log.foamRun)" 1>&2
+    exit 1
+}
+grep "cells are closed" case/log.foamRun || {
+    echo "Allrun: diffusionExchange did not report its closed cells" 1>&2
+    exit 1
+}
+python3 nodule.py check case || { echo "Allrun: off the reference" 1>&2; exit 1; }
