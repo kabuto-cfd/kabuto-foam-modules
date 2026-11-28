@@ -42,7 +42,8 @@ GPL-3.0-or-later. Everything here links OpenFOAM and is GPL.
     (`solver <name>;`), so cases need no `libs` entry. One `wmake` line each in `Allwmake`.
     - `diffusionExchange` scalar diffusion with a diffusivity field (D = 0 closes a cell,
       harmonic interpolation) and a linear exchange with a time-dependent reservoir; exact
-      solutions in `tutorials/diffusionExchange/slab`
+      solutions in `tutorials/diffusionExchange/slab`; `tumourNodule` is an illustration with
+      assumed tissue properties (say so wherever it is described: not a validated model)
 - `test/<module>/` small `Test-<module>` applications that check the numerics without a case;
   exit status 1 on failure. Built by `Allwmake`, run by CI.
 - `tutorials/<module>/<case>/Allrun` a short run that shows the module working. Prefer copying an
@@ -65,7 +66,7 @@ set +e; source /opt/openfoam14/etc/bashrc; set -e
 tutorials/stressOmega/ductSecondaryFlow/Allrun 300 && tutorials/stressOmega/channel395/Allrun
 Test-wallLaw && tutorials/wallFunctions/channelYPlus/Allrun && tutorials/wallFunctions/pitzDailySteady/Allrun nes2l
 Test-sigma && tutorials/sigma/channel395/Allrun && tutorials/wallFunctions/channelWMLES/Allrun
-tutorials/diffusionExchange/slab/Allrun
+tutorials/diffusionExchange/slab/Allrun && tutorials/diffusionExchange/tumourNodule/Allrun
 ```
 
 ## Code conventions

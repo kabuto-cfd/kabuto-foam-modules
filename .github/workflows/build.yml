@@ -57,6 +57,7 @@ jobs:
           tutorials/sigma/channel395/Allrun
           tutorials/wallFunctions/channelWMLES/Allrun
           tutorials/diffusionExchange/slab/Allrun
+          tutorials/diffusionExchange/tumourNodule/Allrun
 
       - name: Logs on failure
         if: failure()
